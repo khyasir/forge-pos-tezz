@@ -14,6 +14,8 @@ COPY . .
 # NEXT_PUBLIC_* values are inlined into the client bundle at build time, so
 # they must be exported as ENV *before* `npm run build` runs, not passed at
 # container-run time (that would be a no-op for already-built client code).
+ARG API_PROXY_TARGET=http://api:8000
+ENV API_PROXY_TARGET=$API_PROXY_TARGET
 ARG NEXT_PUBLIC_DEMO_API_KEY=""
 ARG NEXT_PUBLIC_API_BASE="/api"
 ENV NEXT_PUBLIC_DEMO_API_KEY=$NEXT_PUBLIC_DEMO_API_KEY

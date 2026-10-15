@@ -89,7 +89,9 @@ function fromServerOrder(local: LocalOrder, full: OrderRead): LocalOrder {
     order_status: full.status,
     fiscal_status: full.fiscal_status,
     fiscal_number: full.fiscal_number,
+    fiscal_error: full.fiscal_error,
     erp_status: full.erp_status,
+    erp_error: full.erp_error,
   };
 }
 
@@ -166,23 +168,36 @@ export async function runSyncOnce(terminalId: string | undefined): Promise<SyncR
   }
 }
 
-/** Retries a single row from the Sync Status page: if it never reached the
- * server, re-queues + pushes it now; if it's already on the server, retries
- * whichever downstream step (fiscal/ERP) failed. */
+/** Retries whichever downstream step (fiscal/ERP) failed for an order that
+ * already exists server-side. Works for rows that originated entirely on
+ * the server too (e.g. the seed's 3 demo "fiscal failed" orders), which
+ * have no IndexedDB record at all -- that's why this takes a server
+ * order_id directly rather than requiring a local record. If a matching
+ * local record exists, it's refreshed with the final statuses too. */
+export async function retryServerOrder(orderId: string, fiscalFailed: boolean, erpFailed: boolean): Promise<OrderRead> {
+  if (fiscalFailed) await api.post(`/v1/fiscal/${orderId}/retry`).catch(() => undefined);
+  if (erpFailed) await api.post(`/v1/erp/${orderId}/retry`).catch(() => undefined);
+  const full = await api.get<OrderRead>(`/v1/orders/${orderId}`);
+  const local = await findLocalByServerId(orderId);
+  if (local) {
+    await putLocalOrder({ ...fromServerOrder(local, full), status: "SYNCED", updated_at: new Date().toISOString() });
+  }
+  return full;
+}
+
+async function findLocalByServerId(serverId: string): Promise<LocalOrder | undefined> {
+  const all = await listLocalOrders();
+  return all.find((o) => o.server_id === serverId);
+}
+
+/** Retries a single LOCAL/FAILED row from the Sync Status page that has
+ * never reached the server at all: re-queues + pushes it now. */
 export async function retryOrder(clientUuid: string, terminalId: string | undefined): Promise<void> {
   const db = await getDB();
   const order = await db.get("orders", clientUuid);
   if (!order) return;
   if (order.status === "SYNCED" && order.server_id) {
-    if (order.fiscal_status === "failed") {
-      await api.post(`/v1/fiscal/${order.server_id}/retry`).catch(() => undefined);
-    }
-    if (order.erp_status === "failed") {
-      await api.post(`/v1/erp/${order.server_id}/retry`).catch(() => undefined);
-    }
-    let full = await api.get<OrderRead>(`/v1/orders/${order.server_id}`);
-    full = await finalizePaymentIfNeeded(order, full);
-    await putLocalOrder({ ...fromServerOrder(order, full), status: "SYNCED", updated_at: new Date().toISOString() });
+    await retryServerOrder(order.server_id, order.fiscal_status === "failed", order.erp_status === "failed");
     return;
   }
   order.status = "LOCAL"; // re-queue for the next sync pass
@@ -190,7 +205,7 @@ export async function retryOrder(clientUuid: string, terminalId: string | undefi
   await runSyncOnce(terminalId);
 }
 
-export async function retryAll(terminalId: string | undefined): Promise<void> {
+export async function retryAll(terminalId: string | undefined, serverFailedOrderIds: string[] = []): Promise<void> {
   await runSyncOnce(terminalId);
   const all = await listLocalOrders();
   const needsDownstreamRetry = all.filter(
@@ -198,6 +213,13 @@ export async function retryAll(terminalId: string | undefined): Promise<void> {
   );
   for (const o of needsDownstreamRetry) {
     await retryOrder(o.client_uuid, terminalId);
+  }
+  // Also retry server-side-only failed orders (e.g. the seed's demo rows)
+  // that have no local IndexedDB record to key off of.
+  const alreadyHandled = new Set(needsDownstreamRetry.map((o) => o.server_id));
+  for (const orderId of serverFailedOrderIds) {
+    if (alreadyHandled.has(orderId)) continue;
+    await retryServerOrder(orderId, true, true).catch(() => undefined);
   }
 }
 

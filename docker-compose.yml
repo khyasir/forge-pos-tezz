@@ -47,12 +47,18 @@ services:
     build:
       context: ./web
       args:
+        API_PROXY_TARGET: ${API_PROXY_TARGET:-http://api:8000}
         NEXT_PUBLIC_API_URL: ""
         NEXT_PUBLIC_DEMO_API_KEY: ${NEXT_PUBLIC_DEMO_API_KEY:-tz_test_tezzdemo0000000000000001}
     depends_on:
       api:
         condition: service_healthy
     environment:
+      # Server-side rewrite target (next.config.js) so the web container's
+      # /api/* proxy reaches the "api" service by its compose DNS name,
+      # instead of the next.config.js default of localhost:8000 (which
+      # inside this container would resolve to itself).
+      API_PROXY_TARGET: http://api:8000
       NEXT_PUBLIC_API_URL: ""
       NEXT_PUBLIC_DEMO_API_KEY: ${NEXT_PUBLIC_DEMO_API_KEY:-tz_test_tezzdemo0000000000000001}
     expose:

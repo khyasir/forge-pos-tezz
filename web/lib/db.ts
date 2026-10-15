@@ -20,7 +20,9 @@ export interface LocalOrder {
   order_status?: string; // server order.status (open|paid|void|refunded) once known
   fiscal_status?: string;
   fiscal_number?: string;
+  fiscal_error?: string;
   erp_status?: string;
+  erp_error?: string;
   created_at: string;
   updated_at: string;
   // Tender info captured at checkout time but NOT sent through
