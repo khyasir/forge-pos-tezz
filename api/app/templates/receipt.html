@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Receipt {{ order.order_no }}</title>
+<style>
+  body { font-family: 'Courier New', monospace; width: 80mm; margin: 0 auto; padding: 8px; color: #000; font-size: 12px; }
+  h1 { font-size: 15px; text-align: center; margin: 2px 0; }
+  .center { text-align: center; }
+  .muted { color: #333; font-size: 11px; }
+  table { width: 100%; border-collapse: collapse; margin: 6px 0; }
+  td, th { font-size: 11px; padding: 1px 0; text-align: left; }
+  .right { text-align: right; }
+  hr { border: none; border-top: 1px dashed #000; margin: 6px 0; }
+  .totals td { font-weight: bold; }
+  .badge { display: inline-block; border: 1px solid #000; padding: 2px 6px; margin: 4px 0; font-weight: bold; }
+  .badge.offline { background: #fff3cd; }
+  .badge.failed { background: #f8d7da; }
+  .qr { text-align: center; margin: 8px 0; }
+  .qr svg { width: 28mm; height: 28mm; }
+  .fine { font-size: 9px; text-align: center; margin-top: 6px; }
+</style>
+</head>
+<body>
+  <h1>{{ company.name if company else "Tezz POS" }}</h1>
+  <p class="center muted">{{ branch.address if branch else "" }}{% if branch and branch.city %}, {{ branch.city }}{% endif %}</p>
+  <p class="center muted">
+    NTN: {{ company.ntn if company else "-" }} &nbsp; STRN: {{ company.strn if company else "-" }}<br/>
+    Tax Office / Authority: {{ company.tax_authority if company else "-" }}<br/>
+    POS Registration No: {{ branch.id[:8] if branch else "-" }}
+  </p>
+  <hr/>
+  <p>
+    Invoice No: <b>{{ order.order_no }}</b><br/>
+    Date/Time: {{ order.paid_at or order.created_at }}<br/>
+    Payment Mode: {{ order.payment_mode or "-" }}<br/>
+    Order Type: {{ order.order_type }}<br/>
+    {% if customer and customer.phone %}Customer: {{ customer.name }} ({{ customer.phone }})<br/>{% endif %}
+  </p>
+  <hr/>
+  <table>
+    <thead>
+      <tr><th>Item</th><th class="right">Qty</th><th class="right">Rate</th><th class="right">Amount</th></tr>
+    </thead>
+    <tbody>
+      {% for line in lines %}
+      <tr>
+        <td>{{ line.name }}{% if line.modifiers %}<br/><span class="muted">{{ line.modifiers|join(", ") }}</span>{% endif %}</td>
+        <td class="right">{{ line.qty }}</td>
+        <td class="right">{{ "%.2f"|format(line.unit_price) }}</td>
+        <td class="right">{{ "%.2f"|format(line.line_total) }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <hr/>
+  <table class="totals">
+    <tr><td>Price excl. tax</td><td class="right">Rs. {{ "%.2f"|format(order.subtotal) }}</td></tr>
+    <tr><td>Discount</td><td class="right">Rs. {{ "%.2f"|format(order.discount) }}</td></tr>
+    <tr><td>Sales Tax</td><td class="right">Rs. {{ "%.2f"|format(order.tax_amount) }}</td></tr>
+    <tr><td>{{ pos_fee_label }}</td><td class="right">Rs. {{ "%.2f"|format(order.pos_fee) }}</td></tr>
+    <tr><td>Payable</td><td class="right">Rs. {{ "%.2f"|format(order.total) }}</td></tr>
+    {% for p in payments %}
+    <tr><td>Received ({{ p.payment_method_id[:6] }})</td><td class="right">Rs. {{ "%.2f"|format(p.tendered) }}</td></tr>
+    {% if p.change %}<tr><td>Change</td><td class="right">Rs. {{ "%.2f"|format(p.change) }}</td></tr>{% endif %}
+    {% endfor %}
+  </table>
+  <hr/>
+
+  {% if is_offline %}
+    <p class="center badge offline">OFFLINE MODE &mdash; FBR fiscal number pending</p>
+  {% elif is_fiscal_failed %}
+    <p class="center badge failed">FISCAL PENDING &mdash; {{ order.fiscal_error }}</p>
+  {% else %}
+    <p class="center"><b>FBR Fiscal Invoice No:</b><br/>{{ order.fiscal_number }}</p>
+    <div class="qr">{{ qr_svg | safe }}</div>
+  {% endif %}
+
+  <p class="fine">
+    Verify this invoice through FBR Tax Asaan Mobile App or SMS at 9966<br/>
+    and win exciting prizes in the draw.<br/>
+    Integrated with FBR / PRA &mdash; Powered by Tezz POS
+  </p>
+</body>
+</html>

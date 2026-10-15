@@ -149,7 +149,7 @@ v1.1: Foodpanda plugin (needs Delivery Hero partner approval [V https://integrat
 - Sync Status page (cashier + manager): counters (Synced / Pending / Failed), table with order no, time, amount, server/fiscal/ERP status chips, last error, Retry button, Retry all, export CSV. Manager can see all terminals of a branch.
 
 ## 14. Full public REST API (v1), all JSON, OpenAPI 3 at /docs and /openapi.json
-Auth: API keys per company (scopes read/write, sandbox vs live prefix sk_test_ / sk_live_), plus user JWT for the PWA. Idempotency-Key header on all POST. Cursor pagination (?limit&cursor), filters (?updated_since). Errors: RFC 7807 style.
+Auth: API keys per company (scopes read/write, sandbox vs live prefix tz_test_ / tz_live_), plus user JWT for the PWA. Idempotency-Key header on all POST. Cursor pagination (?limit&cursor), filters (?updated_since). Errors: RFC 7807 style.
 CRUD (GET list, GET one, POST, PATCH, DELETE) for:
 companies, brands, branches, terminals, users, roles, categories, products, product-variants, modifier-groups, modifiers, deals (combos), price-lists, taxes, customers, tables, floors, kitchen-stations, payment-methods, orders, order-lines, payments, refunds, shifts (pos sessions), cash-movements, discounts, webhooks, api-keys.
 Actions: POST /orders/{id}/pay, /void, /refund, /send-to-kitchen; POST /shifts/{id}/close; GET /shifts/{id}/z-report; GET /orders/{id}/receipt(.html|.pdf); POST /sync/batch; GET /sync/status; POST /fiscal/{order_id}/retry; GET /fiscal/status; GET /reports/sales.

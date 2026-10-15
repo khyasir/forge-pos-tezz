@@ -1,0 +1,196 @@
+{
+  "info": {
+    "name": "Tezz POS API",
+    "description": "Sandbox collection for the Tezz POS REST API. Set collection variables base_url and api_key (tz_test_...) before running.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://localhost:8000" },
+    { "key": "api_key", "value": "tz_test_replace_me" },
+    { "key": "jwt", "value": "" },
+    { "key": "branch_id", "value": "" },
+    { "key": "terminal_id", "value": "" },
+    { "key": "product_id", "value": "" },
+    { "key": "payment_method_id", "value": "" },
+    { "key": "order_id", "value": "" },
+    { "key": "shift_id", "value": "" }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{api_key}}" }]
+  },
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (PIN)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/auth/login",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branch_id\": \"{{branch_id}}\",\n  \"terminal_id\": \"{{terminal_id}}\",\n  \"pin\": \"1111\"\n}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog",
+      "item": [
+        { "name": "List branches", "request": { "method": "GET", "url": "{{base_url}}/api/v1/branches" } },
+        { "name": "List terminals", "request": { "method": "GET", "url": "{{base_url}}/api/v1/terminals" } },
+        { "name": "List categories", "request": { "method": "GET", "url": "{{base_url}}/api/v1/categories" } },
+        { "name": "List products", "request": { "method": "GET", "url": "{{base_url}}/api/v1/products?limit=50" } },
+        { "name": "List modifier groups", "request": { "method": "GET", "url": "{{base_url}}/api/v1/modifier-groups" } },
+        { "name": "List deals", "request": { "method": "GET", "url": "{{base_url}}/api/v1/deals" } },
+        { "name": "List taxes", "request": { "method": "GET", "url": "{{base_url}}/api/v1/taxes" } },
+        { "name": "List payment methods", "request": { "method": "GET", "url": "{{base_url}}/api/v1/payment-methods" } },
+        { "name": "List floors (with tables)", "request": { "method": "GET", "url": "{{base_url}}/api/v1/floors" } },
+        { "name": "List kitchen stations", "request": { "method": "GET", "url": "{{base_url}}/api/v1/kitchen-stations" } },
+        {
+          "name": "Create product",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/products",
+            "body": { "mode": "raw", "raw": "{\n  \"company_id\": \"ignored\",\n  \"name\": \"New Item\",\n  \"price\": 300\n}" }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/orders",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"client_uuid\": \"{{$guid}}\",\n  \"branch_id\": \"{{branch_id}}\",\n  \"terminal_id\": \"{{terminal_id}}\",\n  \"order_type\": \"dine_in\",\n  \"lines\": [\n    { \"product_id\": \"{{product_id}}\", \"name_snapshot\": \"Demo item\", \"qty\": 1, \"unit_price\": 500 }\n  ]\n}"
+            }
+          }
+        },
+        { "name": "List orders", "request": { "method": "GET", "url": "{{base_url}}/api/v1/orders?limit=20" } },
+        { "name": "Get order", "request": { "method": "GET", "url": "{{base_url}}/api/v1/orders/{{order_id}}" } },
+        {
+          "name": "Pay order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/pay",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"payments\": [ { \"payment_method_id\": \"{{payment_method_id}}\", \"amount\": 581, \"tendered\": 600 } ]\n}"
+            }
+          }
+        },
+        { "name": "Void order", "request": { "method": "POST", "url": "{{base_url}}/api/v1/orders/{{order_id}}/void" } },
+        {
+          "name": "Refund order",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/refund",
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"customer request\"\n}" }
+          }
+        },
+        {
+          "name": "Send to kitchen",
+          "request": { "method": "POST", "url": "{{base_url}}/api/v1/orders/{{order_id}}/send-to-kitchen" }
+        },
+        {
+          "name": "Set KDS status",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/orders/{{order_id}}/kds-status",
+            "body": { "mode": "raw", "raw": "{\n  \"kds_status\": \"preparing\"\n}" }
+          }
+        },
+        { "name": "Receipt JSON", "request": { "method": "GET", "url": "{{base_url}}/api/v1/orders/{{order_id}}/receipt" } },
+        { "name": "Receipt HTML", "request": { "method": "GET", "url": "{{base_url}}/api/v1/orders/{{order_id}}/receipt.html" } }
+      ]
+    },
+    {
+      "name": "Sync",
+      "item": [
+        {
+          "name": "Sync batch",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/sync/batch",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"terminal_id\": \"{{terminal_id}}\",\n  \"orders\": [\n    {\n      \"client_uuid\": \"{{$guid}}\",\n      \"branch_id\": \"{{branch_id}}\",\n      \"offline\": true,\n      \"lines\": [ { \"product_id\": \"{{product_id}}\", \"name_snapshot\": \"Demo item\", \"qty\": 1, \"unit_price\": 500 } ]\n    }\n  ]\n}"
+            }
+          }
+        },
+        { "name": "Sync status", "request": { "method": "GET", "url": "{{base_url}}/api/v1/sync/status?terminal_id={{terminal_id}}" } },
+        { "name": "Demo unsynced orders (no auth)", "request": { "method": "GET", "url": "{{base_url}}/api/v1/demo/unsynced-orders" } }
+      ]
+    },
+    {
+      "name": "Fiscal & ERP",
+      "item": [
+        { "name": "Fiscal status", "request": { "method": "GET", "url": "{{base_url}}/api/v1/fiscal/status" } },
+        { "name": "Fiscal retry", "request": { "method": "POST", "url": "{{base_url}}/api/v1/fiscal/{{order_id}}/retry" } },
+        { "name": "ERP status", "request": { "method": "GET", "url": "{{base_url}}/api/v1/erp/status" } },
+        { "name": "ERP retry", "request": { "method": "POST", "url": "{{base_url}}/api/v1/erp/{{order_id}}/retry" } }
+      ]
+    },
+    {
+      "name": "Shifts",
+      "item": [
+        {
+          "name": "Open shift",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/shifts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"branch_id\": \"{{branch_id}}\",\n  \"terminal_id\": \"{{terminal_id}}\",\n  \"user_id\": \"\",\n  \"opening_float\": 5000\n}"
+            }
+          }
+        },
+        { "name": "List shifts", "request": { "method": "GET", "url": "{{base_url}}/api/v1/shifts" } },
+        {
+          "name": "Close shift",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/shifts/{{shift_id}}/close",
+            "body": { "mode": "raw", "raw": "{\n  \"counted_cash\": 5000\n}" }
+          }
+        },
+        { "name": "Z-report", "request": { "method": "GET", "url": "{{base_url}}/api/v1/shifts/{{shift_id}}/z-report" } }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        { "name": "List users", "request": { "method": "GET", "url": "{{base_url}}/api/v1/users" } },
+        { "name": "List API keys", "request": { "method": "GET", "url": "{{base_url}}/api/v1/api-keys" } },
+        {
+          "name": "Create webhook",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": "{{base_url}}/api/v1/webhooks",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_id\": \"ignored\",\n  \"url\": \"https://example.com/webhooks/tezz\",\n  \"secret\": \"whsec_demo\",\n  \"events\": \"order.paid,fiscal.failed\"\n}"
+            }
+          }
+        }
+      ]
+    }
+  ]
+}

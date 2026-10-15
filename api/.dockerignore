@@ -1,0 +1,6 @@
+.venv
+__pycache__
+*.pyc
+tezz.db
+tests
+.pytest_cache

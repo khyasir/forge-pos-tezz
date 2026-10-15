@@ -70,6 +70,16 @@ web_modules/
 .env.*
 !.env.example
 
+# Python / FastAPI backend
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.db
+.pytest_cache/
+.coverage
+htmlcov/
+
 # parcel-bundler cache (https://parceljs.org/)
 .cache
 .parcel-cache
@@ -147,3 +157,10 @@ vite.config.ts.timestamp-*
 
 # Turbo Repo
 .turbo
+
+.venv/
+*.db
+.env
+__pycache__/
+.next/
+node_modules/
