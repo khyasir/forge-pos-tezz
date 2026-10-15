@@ -12,6 +12,7 @@ class Settings(BaseSettings):
 
     fiscal_provider: str = "mock"  # mock | fbr
     fiscal_mock_fail_rate: float = 0.0
+    default_tax_authority: str = "PRA"  # Punjab Revenue Authority by default (FBR | PRA | SRB)
     fbr_sandbox_url: str = "https://esp.fbr.gov.pk:8244/FBR/v1/api/Live/PostData"
     fbr_pos_id: str = "00000"
     fbr_bearer_token: str = ""
@@ -21,6 +22,11 @@ class Settings(BaseSettings):
     odoo_db: str = ""
     odoo_username: str = ""
     odoo_api_key: str = ""
+    odoo_password: str = ""  # alternative to api key; load from untracked env file only
+    odoo_branch_id: int = 24  # branch.wags "Test" on staging
+    odoo_import_limit: int = 500
+    odoo_customer_limit: int = 200
+    odoo_order_note_prefix: str = "TEZZ-TEST"
 
     pos_fee_pkr: float = 1.0
 

@@ -84,6 +84,7 @@ class ApiKey(Base, TimestampMixin):
 class Category(Base, TimestampMixin):
     __tablename__ = "categories"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    erp_ref: Mapped[str] = mapped_column(String(64), default="", index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"))
     name: Mapped[str] = mapped_column(String(100))
     name_ur: Mapped[str] = mapped_column(String(100), default="")
@@ -93,6 +94,7 @@ class Category(Base, TimestampMixin):
 class Tax(Base, TimestampMixin):
     __tablename__ = "taxes"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    erp_ref: Mapped[str] = mapped_column(String(64), default="", index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"))
     name: Mapped[str] = mapped_column(String(100))
     authority: Mapped[str] = mapped_column(String(20), default="PRA")
@@ -111,6 +113,7 @@ class KitchenStation(Base, TimestampMixin):
 class Product(Base, TimestampMixin):
     __tablename__ = "products"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    erp_ref: Mapped[str] = mapped_column(String(64), default="", index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"))
     category_id: Mapped[str] = mapped_column(ForeignKey("categories.id"), nullable=True)
     tax_id: Mapped[str] = mapped_column(ForeignKey("taxes.id"), nullable=True)
@@ -129,6 +132,7 @@ class Product(Base, TimestampMixin):
 class ModifierGroup(Base, TimestampMixin):
     __tablename__ = "modifier_groups"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    erp_ref: Mapped[str] = mapped_column(String(64), default="", index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"))
     name: Mapped[str] = mapped_column(String(100))
     name_ur: Mapped[str] = mapped_column(String(100), default="")
@@ -141,6 +145,7 @@ class ModifierGroup(Base, TimestampMixin):
 class Modifier(Base, TimestampMixin):
     __tablename__ = "modifiers"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    erp_ref: Mapped[str] = mapped_column(String(64), default="", index=True)
     group_id: Mapped[str] = mapped_column(ForeignKey("modifier_groups.id"))
     name: Mapped[str] = mapped_column(String(100))
     name_ur: Mapped[str] = mapped_column(String(100), default="")
@@ -164,6 +169,7 @@ class Deal(Base, TimestampMixin):
 class Customer(Base, TimestampMixin):
     __tablename__ = "customers"
     id: Mapped[str] = mapped_column(String(32), primary_key=True, default=_uuid)
+    erp_ref: Mapped[str] = mapped_column(String(64), default="", index=True)
     company_id: Mapped[str] = mapped_column(ForeignKey("companies.id"))
     name: Mapped[str] = mapped_column(String(150), default="")
     phone: Mapped[str] = mapped_column(String(30), default="")
@@ -251,6 +257,7 @@ class Order(Base, TimestampMixin):
 
     erp_status: Mapped[str] = mapped_column(String(20), default="pending")
     erp_error: Mapped[str] = mapped_column(Text, default="")
+    erp_ref: Mapped[str] = mapped_column(String(64), default="")
 
     paid_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 

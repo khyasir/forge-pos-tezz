@@ -42,7 +42,7 @@ def run_seed(db: Session) -> None:
         city="Lahore",
         ntn="1234567-8",
         strn="3277876123456",
-        tax_authority="PRA",
+        tax_authority=get_settings().default_tax_authority,
     )
     db.add(company)
     db.flush()

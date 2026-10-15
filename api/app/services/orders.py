@@ -228,14 +228,28 @@ def run_erp_push(db: Session, order: models.Order) -> models.Order:
     adapter = get_erp_adapter()
     payload = {
         "id": order.id,
+        "usin": order.client_uuid,
         "order_no": order.order_no,
         "total": order.total,
-        "lines": [{"name": l.name_snapshot, "qty": l.qty, "price": l.unit_price} for l in order.lines],
+        "lines": [
+            {
+                "name": l.name_snapshot,
+                "qty": l.qty,
+                "price": l.unit_price,
+                "erp_product_ref": (db.get(models.Product, l.product_id).erp_ref if getattr(l, "product_id", None) and db.get(models.Product, l.product_id) else ""),
+            }
+            for l in order.lines
+        ],
     }
+    if not any(l["erp_product_ref"] for l in payload["lines"]):
+        # Company not linked to an ERP (e.g. demo data): keep the local mock flow.
+        from ..adapters.erp.mock import MockERPAdapter
+        adapter = MockERPAdapter()
     result = adapter.push_order(payload)
     if result.ok:
         order.erp_status = "ok"
         order.erp_error = ""
+        order.erp_ref = result.erp_ref
     else:
         order.erp_status = "failed"
         order.erp_error = result.error

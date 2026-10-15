@@ -67,3 +67,11 @@ Open http://localhost:8120 (change host port with APP_PORT=8150 docker compose u
 
 If containers cannot reach each other (some locked-down Linux sandboxes), use the host-network override:
 `APP_PORT=8120 docker compose -f docker-compose.yml -f docker-compose.hostnet.yml up -d --build`
+
+## 6. Tax authority default: Punjab (PRA)
+The default province/tax authority is PRA (Punjab Revenue Authority): `DEFAULT_TAX_AUTHORITY=PRA` (options FBR, PRA, SRB).
+Demo tax: PRA 16% cash, 5% card/digital (configurable). There are no FBR/PRA sandbox credentials yet, so fiscal
+numbers come from the built-in test (mock) adapter (`FISCAL_PROVIDER=mock`).
+
+## 7. Odoo (WAGS) staging connector
+See docs/odoo-wags.md. Log in with PIN 4444 at branch "Odoo Test Branch" after running the import.
