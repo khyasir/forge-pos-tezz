@@ -53,6 +53,7 @@ def build_receipt_data(db: Session, order: models.Order) -> dict:
         "customer": customer,
         "lines": lines,
         "payments": payments,
+        "method_names": {m.id: m.name for m in db.query(models.PaymentMethod).all()},
         "qr_svg": qr,
         "is_offline": order.fiscal_status == "offline_mode",
         "is_fiscal_failed": order.fiscal_status == "failed",
