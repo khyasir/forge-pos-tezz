@@ -1,0 +1,65 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-3 text-base font-semibold
+      transition active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-50 select-none;
+  }
+  .btn-primary {
+    @apply btn bg-emerald-600 text-white shadow-card hover:bg-emerald-700;
+  }
+  .btn-amber {
+    @apply btn bg-amber-500 text-white shadow-card hover:bg-amber-600;
+  }
+  .btn-secondary {
+    @apply btn bg-white text-slate-700 border border-slate-200 shadow-card hover:bg-slate-50;
+  }
+  .btn-danger {
+    @apply btn bg-rose-600 text-white shadow-card hover:bg-rose-700;
+  }
+  .btn-ghost {
+    @apply btn bg-transparent text-slate-600 hover:bg-slate-100;
+  }
+  .card {
+    @apply rounded-2xl bg-white shadow-card border border-slate-100;
+  }
+  .input {
+    @apply w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-base
+      focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100;
+  }
+  .chip {
+    @apply inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold;
+  }
+  .chip-ok {
+    @apply chip bg-emerald-100 text-emerald-700;
+  }
+  .chip-pending {
+    @apply chip bg-amber-100 text-amber-700;
+  }
+  .chip-failed {
+    @apply chip bg-rose-100 text-rose-700;
+  }
+  .chip-neutral {
+    @apply chip bg-slate-100 text-slate-600;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 999px;
+}

@@ -1,0 +1,64 @@
+services:
+  db:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-tezz}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-tezz_dev_password}
+      POSTGRES_DB: ${POSTGRES_DB:-tezz}
+    volumes:
+      - tezz_db_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-tezz}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  api:
+    build: ./api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql+pg8000://tezz:tezz_dev_password@db:5432/tezz}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production}
+      JWT_ALGORITHM: ${JWT_ALGORITHM:-HS256}
+      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-720}
+      FISCAL_PROVIDER: ${FISCAL_PROVIDER:-mock}
+      FISCAL_MOCK_FAIL_RATE: ${FISCAL_MOCK_FAIL_RATE:-0.0}
+      FBR_SANDBOX_URL: ${FBR_SANDBOX_URL:-https://esp.fbr.gov.pk:8244/FBR/v1/api/Live/PostData}
+      FBR_POS_ID: ${FBR_POS_ID:-}
+      FBR_BEARER_TOKEN: ${FBR_BEARER_TOKEN:-}
+      ERP_PROVIDER: ${ERP_PROVIDER:-mock}
+      ODOO_URL: ${ODOO_URL:-}
+      ODOO_DB: ${ODOO_DB:-}
+      ODOO_USERNAME: ${ODOO_USERNAME:-}
+      ODOO_API_KEY: ${ODOO_API_KEY:-}
+      POS_FEE_PKR: ${POS_FEE_PKR:-1.0}
+      SEED_ON_STARTUP: ${SEED_ON_STARTUP:-true}
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  web:
+    build:
+      context: ./web
+      args:
+        NEXT_PUBLIC_API_URL: ""
+        NEXT_PUBLIC_DEMO_API_KEY: ${NEXT_PUBLIC_DEMO_API_KEY:-tz_test_tezzdemo0000000000000001}
+    depends_on:
+      api:
+        condition: service_healthy
+    environment:
+      NEXT_PUBLIC_API_URL: ""
+      NEXT_PUBLIC_DEMO_API_KEY: ${NEXT_PUBLIC_DEMO_API_KEY:-tz_test_tezzdemo0000000000000001}
+    expose:
+      - "3000"
+    ports:
+      - "${APP_PORT:-8120}:3000"
+
+volumes:
+  tezz_db_data:
