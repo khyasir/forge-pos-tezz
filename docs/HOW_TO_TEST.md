@@ -50,3 +50,20 @@ Open `http://localhost:${APP_PORT:-8120}`.
 ## 4. API-only testing (Postman / curl)
 Import `postman/tezz.postman_collection.json`. See `docs/api-guide.md` for a curl-based
 "integrate in 15 minutes" walkthrough, including the webhook HMAC signature format.
+
+## 5. Quick run on your own computer (Windows/Mac/Linux with Docker Desktop)
+```bash
+git clone https://github.com/khyasir/forge-pos-tezz.git
+cd forge-pos-tezz
+cp .env.example .env
+docker compose up -d --build        # first build takes 3-6 minutes
+```
+Open http://localhost:8120 (change host port with APP_PORT=8150 docker compose up -d --build).
+- API docs: http://localhost:8120/api/docs
+- Demo PINs: owner 1111, manager 2222, cashier 3333 (branch Gulberg or DHA)
+- Sandbox API key: tz_test_tezzdemo0000000000000001
+- Force FBR failures: set FISCAL_MOCK_FAIL_RATE=1 in .env, then `docker compose up -d api`
+- Reset demo data: `docker compose down -v && docker compose up -d --build`
+
+If containers cannot reach each other (some locked-down Linux sandboxes), use the host-network override:
+`APP_PORT=8120 docker compose -f docker-compose.yml -f docker-compose.hostnet.yml up -d --build`

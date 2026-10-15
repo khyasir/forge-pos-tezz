@@ -238,9 +238,9 @@ function PosPageInner() {
               !showDeals && activeCategory === "all" ? "bg-emerald-600 text-white" : "bg-white text-slate-600 border border-slate-200"
             }`}
           >
-            {t("categories")}
+            {t("all")}
           </button>
-          {categories.map((c) => (
+          {categories.filter((c) => c.name !== "Deals").map((c) => (
             <button
               key={c.id}
               onClick={() => {

@@ -28,7 +28,7 @@ export function estimateTotal(
   const sub = subtotal(lines);
   const rate = taxRateForPayment(tax, isCash);
   const taxAmount = Math.round(sub * rate * 100) / 100;
-  const posFee = POS_FEE_PKR;
+  const posFee = lines.length === 0 ? 0 : POS_FEE_PKR;
   const total = Math.round((sub - discount + taxAmount + posFee) * 100) / 100;
   return { subtotal: sub, taxAmount, posFee, total };
 }

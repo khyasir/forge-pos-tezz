@@ -130,8 +130,8 @@ export default function SyncStatusPage() {
                   {pkr(o.order.lines.reduce((s, l) => s + l.unit_price * l.qty, 0))}
                 </td>
                 <td className="px-4 py-3">
-                  <span className={`chip ${o.status === "FAILED" ? "chip-failed" : "chip-pending"}`}>
-                    {o.status === "FAILED" ? t("failed") : t("pending")}
+                  <span className={`chip ${o.status === "FAILED" ? "chip-failed" : "chip-neutral"}`}>
+                    {o.status === "FAILED" ? t("failed") : t("not_on_server")}
                   </span>
                 </td>
                 <td className="px-4 py-3">
@@ -168,7 +168,9 @@ export default function SyncStatusPage() {
                       {o.erp_status}
                     </span>
                   </td>
-                  <td className="px-4 py-3 max-w-[200px] truncate text-xs text-rose-600">{local?.fiscal_error || local?.erp_error || ""}</td>
+                  <td className="px-4 py-3 max-w-[200px] truncate text-xs text-rose-600">
+                    {o.fiscal_error || o.erp_error || local?.fiscal_error || local?.erp_error || ""}
+                  </td>
                   <td className="px-4 py-3">
                     {(o.fiscal_status === "failed" || o.erp_status === "failed") && (
                       <button

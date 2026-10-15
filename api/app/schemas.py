@@ -654,7 +654,9 @@ class SyncOrderStatus(BaseModel):
     order_no: str
     status: str
     fiscal_status: str
+    fiscal_error: str
     erp_status: str
+    erp_error: str
     total: float
     created_at: datetime
 

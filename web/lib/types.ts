@@ -317,7 +317,9 @@ export interface SyncOrderStatus {
   order_no: string;
   status: "synced" | "pending" | "failed" | string;
   fiscal_status: string;
+  fiscal_error: string;
   erp_status: string;
+  erp_error: string;
   total: number;
   created_at: string;
 }

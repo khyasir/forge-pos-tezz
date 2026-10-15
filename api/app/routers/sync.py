@@ -63,7 +63,9 @@ def sync_status(
             order_no=o.order_no,
             status=overall_status(o),
             fiscal_status=o.fiscal_status,
+            fiscal_error=o.fiscal_error or "",
             erp_status=o.erp_status,
+            erp_error=o.erp_error or "",
             total=o.total,
             created_at=o.created_at,
         )

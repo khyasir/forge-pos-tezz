@@ -158,9 +158,11 @@ def run_seed(db: Session) -> None:
         db.add(models.Modifier(id=_id(), group_id=group.id, name=name, name_ur=name_ur, price_delta=delta))
     db.flush()
 
-    karahi_mods = f"{spice_group.id},{size_group.id},{extras_group.id}"
+    karahi_mods_with_size = f"{spice_group.id},{size_group.id},{extras_group.id}"
+    karahi_mods_no_size = f"{spice_group.id},{extras_group.id}"
     for name in ["Chicken Karahi Half", "Chicken Karahi Full", "Mutton Karahi Half", "Mutton Karahi Full", "Chicken White Karahi Half", "Chicken White Karahi Full"]:
-        products[name].modifier_group_ids = karahi_mods
+        has_size_in_name = "Half" in name or "Full" in name
+        products[name].modifier_group_ids = karahi_mods_no_size if has_size_in_name else karahi_mods_with_size
     for name in ["Plain Naan", "Garlic Naan", "Roghni Naan"]:
         products[name].modifier_group_ids = naan_group.id
     db.commit()

@@ -1,3 +1,5 @@
+from app import models
+
 from .conftest import auth_headers
 
 
@@ -54,6 +56,26 @@ def test_sync_status_counts(client, seeded):
     data = r.json()
     assert data["pending"] >= 2
     assert len(data["orders"]) >= 2
+
+
+def test_sync_status_reports_fiscal_failure_reason(client, seeded, db_session):
+    headers = auth_headers(seeded)
+    body = {
+        "terminal_id": seeded["terminal_id"],
+        "orders": [_order_payload(seeded, "client-uuid-failed")],
+    }
+    r = client.post("/api/v1/sync/batch", json=body, headers=headers)
+    server_id = r.json()["results"][0]["server_id"]
+
+    order = db_session.query(models.Order).filter(models.Order.id == server_id).first()
+    order.fiscal_status = "failed"
+    order.fiscal_error = "FBR gateway timeout"
+    db_session.commit()
+
+    status = client.get("/api/v1/sync/status", headers=headers).json()
+    row = next(o for o in status["orders"] if o["order_id"] == server_id)
+    assert row["status"] == "failed"
+    assert row["fiscal_error"] == "FBR gateway timeout"
 
 
 def test_demo_unsynced_orders_endpoint(client):
