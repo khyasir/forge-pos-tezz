@@ -6,11 +6,19 @@ Sync Status page that proves no order was lost.
 
 See `docs-POS_PLAN.md` for the product plan and `SUMMARY.md` for what was actually built.
 
+## Documentation
+- [User guide (owner, manager, cashier)](docs/GUIDE.md)
+- [Sync test report](docs/SYNC_TEST_REPORT.md)
+- [How to test](docs/HOW_TO_TEST.md)
+- [API guide](docs/api-guide.md) and live API docs at `/api/docs`
+- [Odoo (WAGS) connector](docs/odoo-wags.md)
+
 ## Monorepo layout
 ```
 api/        FastAPI + SQLAlchemy 2 backend (Python 3.12)
 web/        Next.js 14 (App Router, TS) PWA cashier UI, Tailwind
-docs/       HOW_TO_TEST.md, api-guide.md
+docs/       GUIDE.md, SYNC_TEST_REPORT.md, HOW_TO_TEST.md, api-guide.md, odoo-wags.md
+e2e/        Playwright end-to-end tests (offline, multi-tab, crash, double-click)
 postman/    Postman collection for the REST API
 docker-compose.yml, .env.example
 ```
@@ -46,7 +54,12 @@ cd api
 . .venv/bin/activate
 pytest -q
 ```
-Tests run against an in-memory SQLite database, so no Postgres/docker is required. See
+Tests run against an in-memory SQLite database, so no Postgres/docker is required.
+
+End-to-end (Playwright, needs the stack running on :8120):
+```bash
+python -m pytest e2e/test_e2e_pos.py -v
+``` See
 `docs/HOW_TO_TEST.md` for a fuller test/demo walkthrough.
 
 ## Configuration

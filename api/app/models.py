@@ -35,6 +35,7 @@ class Company(Base, TimestampMixin):
     ntn: Mapped[str] = mapped_column(String(50), default="")
     strn: Mapped[str] = mapped_column(String(50), default="")
     tax_authority: Mapped[str] = mapped_column(String(20), default="PRA")  # FBR | PRA | SRB
+    default_delivery_fee: Mapped[float] = mapped_column(Float, default=150)
 
     branches: Mapped[list["Branch"]] = relationship(back_populates="company")
 
@@ -127,6 +128,16 @@ class Product(Base, TimestampMixin):
     pct_code: Mapped[str] = mapped_column(String(20), default="0000.0000")
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     modifier_group_ids: Mapped[str] = mapped_column(Text, default="")  # csv of ModifierGroup ids
+    attributes: Mapped[str] = mapped_column(Text, default="")  # e.g. "Size: Large; Colour: Red" (from Odoo)
+    image_source: Mapped[str] = mapped_column(String(10), default="")  # "" | odoo | upload
+    image_data: Mapped[str] = mapped_column(Text, default="", deferred=True)  # data URL (base64), served by /products/{id}/image
+
+    @property
+    def image_url(self) -> str:
+        if not self.image_source:
+            return ""
+        ver = int(self.updated_at.timestamp()) if self.updated_at else 0
+        return f"/api/v1/products/{self.id}/image?v={ver}"
 
 
 class ModifierGroup(Base, TimestampMixin):
@@ -243,6 +254,8 @@ class Order(Base, TimestampMixin):
     discount: Mapped[float] = mapped_column(Float, default=0)
     tax_amount: Mapped[float] = mapped_column(Float, default=0)
     pos_fee: Mapped[float] = mapped_column(Float, default=0)
+    delivery_fee: Mapped[float] = mapped_column(Float, default=0)
+    delivery_address: Mapped[str] = mapped_column(String(300), default="")
     total: Mapped[float] = mapped_column(Float, default=0)
 
     payment_mode: Mapped[str] = mapped_column(String(20), default="")
@@ -260,6 +273,11 @@ class Order(Base, TimestampMixin):
     erp_ref: Mapped[str] = mapped_column(String(64), default="")
 
     paid_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
+
+    # Automatic retry bookkeeping for fiscal (FBR/PRA) and ERP (Odoo) pushes.
+    fiscal_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    erp_attempts: Mapped[int] = mapped_column(Integer, default=0)
+    next_retry_at: Mapped[datetime] = mapped_column(DateTime, nullable=True)
 
     lines: Mapped[list["OrderLine"]] = relationship(
         back_populates="order", cascade="all, delete-orphan"

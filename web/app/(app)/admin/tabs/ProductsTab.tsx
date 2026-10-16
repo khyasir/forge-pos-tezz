@@ -29,7 +29,7 @@ export default function ProductsTab() {
 
   async function refresh() {
     const [p, c, tx, st, mg] = await Promise.all([
-      api.get<ProductRead[]>("/v1/products?limit=200"),
+      api.getAll<ProductRead>("/v1/products"),
       api.get<CategoryRead[]>("/v1/categories?limit=100"),
       api.get<TaxRead[]>("/v1/taxes?limit=50"),
       api.get<KitchenStationRead[]>("/v1/kitchen-stations?limit=50"),
@@ -76,6 +76,32 @@ export default function ProductsTab() {
     }
   }
 
+  async function uploadImage(id: string, file: File | undefined) {
+    if (!file) return;
+    setError(null);
+    if (file.size > 1_500_000) {
+      setError("Image is too large. Maximum size is 1.5 MB.");
+      return;
+    }
+    const dataUrl: string = await new Promise((resolve, reject) => {
+      const r = new FileReader();
+      r.onload = () => resolve(String(r.result));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(file);
+    });
+    try {
+      await api.put(`/v1/products/${id}/image`, { data_url: dataUrl });
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Upload failed");
+    }
+  }
+
+  async function removeImage(id: string) {
+    await api.del(`/v1/products/${id}/image`);
+    await refresh();
+  }
+
   async function remove(id: string) {
     await api.del(`/v1/products/${id}`);
     await refresh();
@@ -89,6 +115,7 @@ export default function ProductsTab() {
           <table className="w-full text-sm">
             <thead className="text-left text-xs uppercase text-slate-400">
               <tr>
+                <th className="py-2">Image</th>
                 <th className="py-2">Name</th>
                 <th className="py-2">Category</th>
                 <th className="py-2 text-right">Price</th>
@@ -97,8 +124,36 @@ export default function ProductsTab() {
             </thead>
             <tbody>
               {products.map((p) => (
-                <tr key={p.id} className="border-t border-slate-100">
-                  <td className="py-2">{p.name}</td>
+                <tr key={p.id} className="border-t border-slate-100" data-testid="admin-product-row">
+                  <td className="py-2">
+                    <div className="flex items-center gap-2">
+                      {p.image_url ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={p.image_url} alt="" className="h-10 w-10 rounded object-cover" />
+                      ) : (
+                        <span className="flex h-10 w-10 items-center justify-center rounded bg-slate-100 text-xs text-slate-400">none</span>
+                      )}
+                      <label className="cursor-pointer text-xs text-emerald-700 underline">
+                        {p.image_url ? "Change" : "Upload"}
+                        <input
+                          type="file"
+                          accept="image/png,image/jpeg,image/webp,image/gif"
+                          className="hidden"
+                          data-testid="image-input"
+                          onChange={(e) => uploadImage(p.id, e.target.files?.[0])}
+                        />
+                      </label>
+                      {p.image_url && (
+                        <button onClick={() => removeImage(p.id)} className="text-xs text-slate-400 underline">
+                          Remove
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                  <td className="py-2">
+                    {p.name}
+                    {p.attributes && <span className="block text-xs text-slate-400">{p.attributes}</span>}
+                  </td>
                   <td className="py-2 text-slate-500">{categories.find((c) => c.id === p.category_id)?.name || "-"}</td>
                   <td className="py-2 text-right">{pkr(p.price)}</td>
                   <td className="py-2 text-right">

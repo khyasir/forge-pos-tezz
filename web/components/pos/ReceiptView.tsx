@@ -17,6 +17,8 @@ export interface LocalReceiptSummary {
   discount: number;
   taxAmount: number;
   posFee: number;
+  deliveryFee?: number;
+  deliveryAddress?: string;
   total: number;
   createdAt: string;
 }
@@ -105,6 +107,13 @@ export default function ReceiptView({
                 <span>-{pkr(local.discount)}</span>
               </div>
             )}
+            {(local.deliveryFee || 0) > 0 && (
+              <div className="flex justify-between">
+                <span>Delivery charges</span>
+                <span>{pkr(local.deliveryFee)}</span>
+              </div>
+            )}
+            {local.deliveryAddress && <p className="text-[10px] text-slate-500">Deliver to: {local.deliveryAddress}</p>}
             <div className="flex justify-between">
               <span>Tax (est.)</span>
               <span>{pkr(local.taxAmount)}</span>

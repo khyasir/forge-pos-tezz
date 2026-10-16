@@ -18,7 +18,16 @@ def sync_batch(
     results = []
     for order_in in payload.orders:
         order_in.terminal_id = order_in.terminal_id or payload.terminal_id
-        order, created = order_service.get_or_create_order(db, auth.company_id, order_in)
+        try:
+            order, created = order_service.get_or_create_order(db, auth.company_id, order_in)
+        except order_service.OrderRejected as exc:
+            results.append(schemas.SyncOrderResult(client_uuid=order_in.client_uuid, status="rejected", error=str(exc)))
+            continue
+        except Exception as exc:  # noqa: BLE001  one bad order must not block the rest of the batch
+            db.rollback()
+            results.append(schemas.SyncOrderResult(client_uuid=order_in.client_uuid, status="error",
+                                                   error=f"Server error: {type(exc).__name__}"))
+            continue
         results.append(
             schemas.SyncOrderResult(
                 client_uuid=order.client_uuid,
@@ -48,7 +57,7 @@ def sync_status(
     def overall_status(o: models.Order) -> str:
         if o.fiscal_status == "failed" or o.erp_status == "failed":
             return "failed"
-        if o.fiscal_status in ("pending",) or o.erp_status in ("pending",):
+        if o.fiscal_status in ("pending", "sending", "offline_mode") or o.erp_status in ("pending", "sending"):
             return "pending"
         return "synced"
 

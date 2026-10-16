@@ -1,5 +1,5 @@
 "use client";
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { getSession } from "@/lib/auth";
 import { api } from "@/lib/api";
@@ -8,11 +8,13 @@ import { pkr, uuid } from "@/lib/format";
 import { cartLineTotal, cartSubtotal, toOrderLines, type CartLine } from "@/lib/cart";
 import { estimateTotal } from "@/lib/pricing";
 import { checkoutOrder } from "@/lib/checkout";
+import { loadOpenState, newTicket, onOpenStateChangedElsewhere, saveOpenState, ticketTitle, type OpenTicket } from "@/lib/openOrders";
 import ModifierDialog from "@/components/pos/ModifierDialog";
 import PayDialog from "@/components/pos/PayDialog";
 import ReceiptView, { type LocalReceiptSummary } from "@/components/pos/ReceiptView";
 import { IconSearch, IconPlus, IconMinus } from "@/components/icons";
 import type {
+  CompanyRead,
   CategoryRead,
   DealRead,
   FloorRead,
@@ -54,11 +56,125 @@ function PosPageInner() {
   const [search, setSearch] = useState("");
   const [modifierProduct, setModifierProduct] = useState<ProductRead | null>(null);
 
-  const [cart, setCart] = useState<CartLine[]>([]);
-  const [orderType, setOrderType] = useState<OrderType>("dine_in");
-  const [tableId, setTableId] = useState(presetTable);
-  const [customerPhone, setCustomerPhone] = useState("");
-  const [discount, setDiscount] = useState(0);
+  // ---- open orders (current + parked), persisted in IndexedDB ----
+  const [openState, setOpenState] = useState<{ activeId: string; tickets: OpenTicket[]; seq: number } | null>(null);
+  const [ordersMenu, setOrdersMenu] = useState(false);
+  const [defaultDeliveryFee, setDefaultDeliveryFee] = useState(0);
+  const remoteUpdate = useRef(false);
+  const submittingRef = useRef(false);
+
+  useEffect(() => {
+    let alive = true;
+    loadOpenState().then((st) => {
+      if (!alive) return;
+      if (presetTable) {
+        st = { ...st, tickets: st.tickets.map((t) => (t.id === st.activeId ? { ...t, tableId: presetTable, orderType: "dine_in" } : t)) };
+      }
+      setOpenState(st);
+    });
+    const off = onOpenStateChangedElsewhere(() =>
+      loadOpenState().then((st) => {
+        remoteUpdate.current = true;
+        // another tab changed the list: keep our own active ticket if it still exists
+        setOpenState((prev) => (prev && st.tickets.some((t) => t.id === prev.activeId) ? { ...st, activeId: prev.activeId } : st));
+      })
+    );
+    return () => {
+      alive = false;
+      off();
+    };
+  }, [presetTable]);
+
+  useEffect(() => {
+    if (!openState) return;
+    if (remoteUpdate.current) {
+      remoteUpdate.current = false;
+      return;
+    }
+    saveOpenState(openState).catch(() => undefined);
+  }, [openState]);
+
+  const blank = useMemo(() => newTicket(0), []);
+  const active: OpenTicket = (openState && openState.tickets.find((t) => t.id === openState.activeId)) || blank;
+
+  const updateActive = useCallback((fn: (t: OpenTicket) => OpenTicket) => {
+    setOpenState((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        tickets: prev.tickets.map((t) => (t.id === prev.activeId ? { ...fn(t), updatedAt: new Date().toISOString() } : t)),
+      };
+    });
+  }, []);
+
+  const cart = active.cart;
+  const orderType = active.orderType;
+  const tableId = active.tableId;
+  const customerPhone = active.customerPhone;
+  const discount = active.discount;
+  const deliveryAddress = active.deliveryAddress;
+  const deliveryFee = orderType === "delivery" ? (active.deliveryFee ?? defaultDeliveryFee) : 0;
+  const setCart = (v: CartLine[] | ((prev: CartLine[]) => CartLine[])) =>
+    updateActive((t) => ({ ...t, cart: typeof v === "function" ? v(t.cart) : v }));
+  const setOrderType = (v: OrderType) => updateActive((t) => ({ ...t, orderType: v }));
+  const setTableId = (v: string) => updateActive((t) => ({ ...t, tableId: v }));
+  const setCustomerPhone = (v: string) => updateActive((t) => ({ ...t, customerPhone: v }));
+  const setDiscount = (v: number) => updateActive((t) => ({ ...t, discount: v }));
+  const setDeliveryFee = (v: number) => updateActive((t) => ({ ...t, deliveryFee: v }));
+  const setDeliveryAddress = (v: string) => updateActive((t) => ({ ...t, deliveryAddress: v }));
+
+  const openTickets = (openState?.tickets || []).filter((t) => t.cart.length > 0 || t.id === openState?.activeId);
+  const openCount = (openState?.tickets || []).filter((t) => t.cart.length > 0).length;
+
+  function parkAndNew() {
+    setOpenState((prev) => {
+      if (!prev) return prev;
+      const cur = prev.tickets.find((t) => t.id === prev.activeId);
+      if (cur && cur.cart.length === 0) return prev; // already on an empty order
+      const t = newTicket(prev.seq + 1);
+      return { activeId: t.id, seq: t.seq, tickets: [...prev.tickets, t] };
+    });
+    setOrdersMenu(false);
+  }
+
+  function switchTo(id: string) {
+    setOpenState((prev) => {
+      if (!prev) return prev;
+      // drop the current ticket if it is empty, it was never used
+      const tickets = prev.tickets.filter((t) => t.id === id || t.cart.length > 0 || t.id !== prev.activeId);
+      return { ...prev, activeId: id, tickets };
+    });
+    setOrdersMenu(false);
+  }
+
+  function discardTicket(id: string) {
+    setOpenState((prev) => {
+      if (!prev) return prev;
+      let tickets = prev.tickets.filter((t) => t.id !== id);
+      let activeId = prev.activeId;
+      let seq = prev.seq;
+      if (activeId === id) {
+        const next = tickets.find((t) => t.cart.length > 0);
+        if (next) activeId = next.id;
+        else {
+          const t = newTicket(seq + 1);
+          seq = t.seq;
+          tickets = [...tickets, t];
+          activeId = t.id;
+        }
+      }
+      return { activeId, tickets, seq };
+    });
+  }
+
+  function closePaidTicket(id: string) {
+    setOpenState((prev) => {
+      if (!prev) return prev;
+      const tickets = prev.tickets.filter((t) => t.id !== id);
+      const t = newTicket(prev.seq + 1);
+      return { activeId: t.id, seq: t.seq, tickets: [...tickets, t] };
+    });
+  }
   const [editingUid, setEditingUid] = useState<string | null>(null);
 
   const [payOpen, setPayOpen] = useState(false);
@@ -69,8 +185,12 @@ function PosPageInner() {
     if (!session) return;
     (async () => {
       try {
+        api
+          .get<CompanyRead>(`/v1/companies/${session.companyId}`)
+          .then((co) => setDefaultDeliveryFee(co.default_delivery_fee ?? 0))
+          .catch(() => undefined);
         const [p, c, mg, d, tx, pm, fl] = await Promise.all([
-          api.get<ProductRead[]>("/v1/products?limit=200"),
+          api.getAll<ProductRead>("/v1/products"),
           api.get<CategoryRead[]>("/v1/categories?limit=100"),
           api.get<ModifierGroupRead[]>("/v1/modifier-groups?limit=100"),
           api.get<DealRead[]>("/v1/deals?limit=100"),
@@ -91,7 +211,8 @@ function PosPageInner() {
         setLoaded(true);
       }
     })();
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token]);
 
   const defaultTax = useMemo(() => taxes.find((x) => x.is_default) || taxes[0], [taxes]);
 
@@ -167,19 +288,22 @@ function PosPageInner() {
   }
 
   const subtotal = cartSubtotal(cart);
-  const estimate = estimateTotal(toOrderLines(cart), discount, defaultTax, true);
-
-  function resetCart() {
-    setCart([]);
-    setDiscount(0);
-    setCustomerPhone("");
-    setTableId("");
-    setOrderType("dine_in");
-  }
+  const estimate = estimateTotal(toOrderLines(cart), discount, defaultTax, true, deliveryFee);
 
   async function handleConfirmPayment(payments: PaymentIn[]) {
+    if (!session || submittingRef.current) return;
+    submittingRef.current = true;
+    try {
+      await doCheckout(payments);
+    } finally {
+      submittingRef.current = false;
+    }
+  }
+
+  async function doCheckout(payments: PaymentIn[]) {
     if (!session) return;
-    const clientUuid = uuid();
+    // The ticket id is the order's client_uuid: stable across retries and double-clicks.
+    const clientUuid = active.id;
     const order: OrderCreate = {
       client_uuid: clientUuid,
       branch_id: session.branchId,
@@ -190,8 +314,10 @@ function PosPageInner() {
       order_type: orderType,
       source: "pos",
       discount,
-      notes: "",
+      notes: orderType === "delivery" && deliveryAddress ? `Delivery to: ${deliveryAddress}` : "",
       offline: false,
+      delivery_fee: orderType === "delivery" ? deliveryFee : 0,
+      delivery_address: orderType === "delivery" ? deliveryAddress : "",
       lines: toOrderLines(cart),
     };
     const result = await checkoutOrder(order, payments, customerPhone || undefined);
@@ -203,12 +329,14 @@ function PosPageInner() {
       discount,
       taxAmount: estimate.taxAmount,
       posFee: estimate.posFee,
+      deliveryFee: estimate.deliveryFee,
+      deliveryAddress: orderType === "delivery" ? deliveryAddress : "",
       total: estimate.total,
       createdAt: new Date().toISOString(),
     };
     setPayOpen(false);
     setReceipt(result.synced && result.order ? { synced: true, order: result.order } : { synced: false, local: localSummary });
-    resetCart();
+    closePaidTicket(clientUuid);
   }
 
   if (!session) return null;
@@ -225,6 +353,58 @@ function PosPageInner() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
+          </div>
+          <div className="relative">
+            <button
+              data-testid="open-orders-badge"
+              onClick={() => setOrdersMenu((v) => !v)}
+              className="relative flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-700 hover:border-emerald-300"
+              title={t("open_orders")}
+            >
+              <span aria-hidden>🧾</span>
+              <span className="hidden sm:inline">{t("open_orders")}</span>
+              <span
+                data-testid="open-orders-count"
+                className={`min-w-[1.5rem] rounded-full px-1.5 text-center text-xs font-bold ${openCount > 1 ? "bg-amber-500 text-white" : "bg-slate-100 text-slate-600"}`}
+              >
+                {openCount}
+              </span>
+            </button>
+            {ordersMenu && (
+              <div className="absolute right-0 z-30 mt-2 w-80 rounded-xl border border-slate-200 bg-white p-2 shadow-xl" data-testid="open-orders-menu">
+                {openTickets.length <= 1 && <p className="p-3 text-sm text-slate-400">{t("no_open_orders")}</p>}
+                {openTickets.map((tk) => {
+                  const tb = allTables.find((x) => x.id === tk.tableId);
+                  const isActive = tk.id === openState?.activeId;
+                  const total = cartSubtotal(tk.cart);
+                  return (
+                    <div key={tk.id} data-testid="open-order-row" className={`flex items-center gap-2 rounded-lg p-2 ${isActive ? "bg-emerald-50" : "hover:bg-slate-50"}`}>
+                      <button className="min-w-0 flex-1 text-left" onClick={() => switchTo(tk.id)}>
+                        <p className="truncate text-sm font-semibold text-slate-800">
+                          {ticketTitle(tk, tb?.name)} {isActive && <span className="text-xs font-normal text-emerald-600">({t("current")})</span>}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {tk.cart.reduce((n, l) => n + l.qty, 0)} items · {pkr(total)} · {new Date(tk.updatedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
+                        </p>
+                      </button>
+                      {tk.cart.length > 0 && (
+                        <button
+                          onClick={() => {
+                            if (window.confirm("Discard this order?")) discardTicket(tk.id);
+                          }}
+                          className="text-xs text-rose-500"
+                        >
+                          {t("discard")}
+                        </button>
+                      )}
+                    </div>
+                  );
+                })}
+                <button onClick={parkAndNew} className="btn-secondary mt-2 w-full !py-2 text-sm" data-testid="menu-new-order">
+                  + {t("new_order")}
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
@@ -285,17 +465,35 @@ function PosPageInner() {
                 <button
                   key={p.id}
                   onClick={() => productTapped(p)}
-                  className="card flex flex-col items-start gap-1 p-4 text-left hover:border-emerald-300 hover:shadow-md"
+                  data-testid="product-tile"
+                  className="card flex flex-col items-stretch overflow-hidden text-left hover:border-emerald-300 hover:shadow-md"
                 >
-                  <span className="font-semibold text-slate-900">{lang === "ur" && p.name_ur ? p.name_ur : p.name}</span>
-                  <span className="mt-auto pt-2 font-bold text-emerald-700">{pkr(p.price)}</span>
+                  <ProductThumb product={p} />
+                  <span className="flex flex-1 flex-col gap-0.5 p-3">
+                    <span className="line-clamp-2 font-semibold text-slate-900">{lang === "ur" && p.name_ur ? p.name_ur : p.name}</span>
+                    {p.attributes && <span className="truncate text-[11px] text-slate-500">{p.attributes}</span>}
+                    <span className="mt-auto pt-1 font-bold text-emerald-700">{pkr(p.price)}</span>
+                  </span>
                 </button>
               ))}
         </div>
       </div>
 
       <div className="flex w-96 shrink-0 flex-col border-l border-slate-200 bg-white p-4">
-        <h2 className="mb-3 text-base font-bold text-slate-900">{t("cart")}</h2>
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="text-base font-bold text-slate-900">
+            {t("cart")} <span className="text-sm font-semibold text-slate-400" data-testid="active-ticket-label">{active.label}</span>
+          </h2>
+          <button
+            data-testid="park-order"
+            disabled={cart.length === 0}
+            onClick={parkAndNew}
+            className="rounded-lg bg-amber-100 px-3 py-1.5 text-xs font-semibold text-amber-800 hover:bg-amber-200 disabled:opacity-40"
+            title="Keep this order open and start a new one"
+          >
+            ⏸ {t("park_order")}
+          </button>
+        </div>
 
         <div className="mb-3 flex gap-2">
           {(["dine_in", "takeaway", "delivery"] as OrderType[]).map((ot) => (
@@ -320,6 +518,29 @@ function PosPageInner() {
               </option>
             ))}
           </select>
+        )}
+
+        {orderType === "delivery" && (
+          <div className="mb-3 space-y-2 rounded-xl bg-sky-50 p-2" data-testid="delivery-box">
+            <div className="flex items-center gap-2">
+              <label className="w-24 text-xs font-semibold text-slate-600">{t("delivery_fee")}</label>
+              <input
+                data-testid="delivery-fee"
+                type="number"
+                min={0}
+                className="input !py-1.5 text-sm"
+                value={deliveryFee}
+                onChange={(e) => setDeliveryFee(Math.max(0, Number(e.target.value) || 0))}
+              />
+            </div>
+            <input
+              data-testid="delivery-address"
+              className="input !py-1.5 text-sm"
+              placeholder={t("delivery_address")}
+              value={deliveryAddress}
+              onChange={(e) => setDeliveryAddress(e.target.value)}
+            />
+          </div>
         )}
 
         <div className="mb-3 flex-1 space-y-2 overflow-y-auto">
@@ -390,6 +611,12 @@ function PosPageInner() {
             <span>{t("subtotal")}</span>
             <span>{pkr(subtotal)}</span>
           </div>
+          {estimate.deliveryFee > 0 && (
+            <div className="flex items-center justify-between text-sm text-slate-600">
+              <span>{t("delivery_fee")}</span>
+              <span>{pkr(estimate.deliveryFee)}</span>
+            </div>
+          )}
           <div className="flex items-center justify-between text-base font-bold text-slate-900">
             <span>{t("total")} (est.)</span>
             <span>{pkr(estimate.total)}</span>
@@ -414,6 +641,7 @@ function PosPageInner() {
         <PayDialog
           lines={toOrderLines(cart)}
           discount={discount}
+          deliveryFee={deliveryFee}
           tax={defaultTax}
           paymentMethods={paymentMethods}
           customerPhone={customerPhone}
@@ -425,5 +653,31 @@ function PosPageInner() {
 
       {receipt && <ReceiptView synced={receipt.synced} order={receipt.order} local={receipt.local} onClose={() => setReceipt(null)} />}
     </div>
+  );
+}
+
+const TILE_COLORS = ["bg-emerald-100 text-emerald-700", "bg-amber-100 text-amber-700", "bg-sky-100 text-sky-700", "bg-rose-100 text-rose-700", "bg-violet-100 text-violet-700"];
+
+function ProductThumb({ product }: { product: ProductRead }) {
+  const [broken, setBroken] = useState(false);
+  if (product.image_url && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={product.image_url}
+        alt=""
+        loading="lazy"
+        onError={() => setBroken(true)}
+        className="h-24 w-full bg-white object-contain"
+        data-testid="product-image"
+      />
+    );
+  }
+  const initials = product.name.split(/\s+/).slice(0, 2).map((w) => w[0] || "").join("").toUpperCase();
+  const color = TILE_COLORS[(product.name.charCodeAt(0) || 0) % TILE_COLORS.length];
+  return (
+    <span className={`flex h-24 w-full items-center justify-center text-2xl font-bold ${color}`} data-testid="product-placeholder">
+      {initials || "?"}
+    </span>
   );
 }

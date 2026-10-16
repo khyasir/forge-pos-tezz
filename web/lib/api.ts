@@ -59,5 +59,18 @@ export const api = {
     request<T>(path, { method: "POST", body: body !== undefined ? JSON.stringify(body) : undefined }, token),
   patch: <T,>(path: string, body?: unknown, token?: string | null) =>
     request<T>(path, { method: "PATCH", body: JSON.stringify(body) }, token),
+  put: <T,>(path: string, body?: unknown, token?: string | null) =>
+    request<T>(path, { method: "PUT", body: JSON.stringify(body) }, token),
   del: <T,>(path: string, token?: string | null) => request<T>(path, { method: "DELETE" }, token),
+  /** Fetches every page of a CRUD list endpoint (server caps limit at 200). */
+  getAll: async <T,>(path: string, pageSize = 200): Promise<T[]> => {
+    const out: T[] = [];
+    const sep = path.includes("?") ? "&" : "?";
+    for (let offset = 0; offset < 20000; offset += pageSize) {
+      const page = await request<T[]>(`${path}${sep}limit=${pageSize}&offset=${offset}`, { method: "GET" });
+      out.push(...page);
+      if (page.length < pageSize) break;
+    }
+    return out;
+  },
 };

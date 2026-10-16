@@ -16,6 +16,7 @@ class CompanyBase(ORMBase):
     ntn: str = ""
     strn: str = ""
     tax_authority: str = "PRA"
+    default_delivery_fee: float = 150
 
 
 class CompanyCreate(CompanyBase):
@@ -29,6 +30,7 @@ class CompanyUpdate(ORMBase):
     ntn: Optional[str] = None
     strn: Optional[str] = None
     tax_authority: Optional[str] = None
+    default_delivery_fee: Optional[float] = None
 
 
 class CompanyRead(CompanyBase):
@@ -217,6 +219,7 @@ class ProductBase(ORMBase):
     pct_code: str = "0000.0000"
     active: bool = True
     modifier_group_ids: str = ""
+    attributes: str = ""
 
 
 class ProductCreate(ProductBase):
@@ -234,10 +237,12 @@ class ProductUpdate(ORMBase):
     pct_code: Optional[str] = None
     active: Optional[bool] = None
     modifier_group_ids: Optional[str] = None
+    attributes: Optional[str] = None
 
 
 class ProductRead(ProductBase):
     id: str
+    image_url: str = ""
     created_at: datetime
     updated_at: datetime
 
@@ -499,6 +504,8 @@ class OrderCreate(BaseModel):
     notes: str = ""
     offline: bool = False
     created_at: Optional[datetime] = None
+    delivery_fee: Optional[float] = None  # None + order_type=delivery -> company default
+    delivery_address: str = ""
     lines: list[OrderLineIn] = []
 
 
@@ -528,6 +535,8 @@ class OrderRead(ORMBase):
     discount: float
     tax_amount: float
     pos_fee: float
+    delivery_fee: float = 0
+    delivery_address: str = ""
     total: float
     payment_mode: str
     notes: str
@@ -638,10 +647,11 @@ class SyncBatchRequest(BaseModel):
 
 class SyncOrderResult(BaseModel):
     client_uuid: str
-    server_id: str
+    server_id: str = ""
     status: str
-    fiscal_status: str
-    erp_status: str
+    fiscal_status: str = ""
+    erp_status: str = ""
+    error: str = ""  # set when status == "rejected" (order not accepted, will not be retried)
 
 
 class SyncBatchResponse(BaseModel):

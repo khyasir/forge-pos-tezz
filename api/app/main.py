@@ -6,9 +6,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from . import models, schemas
 from .config import get_settings
 from .crud_router import make_crud_router
-from .database import Base, SessionLocal, engine
+from .database import Base, SessionLocal, add_missing_columns, engine
+from .routers import product_images
 from .routers import api_keys, auth, demo, erp, fiscal, orders, shifts, sync, users
 from .seed import run_seed
+from . import scopes
 
 logging.basicConfig(level=logging.INFO)
 settings = get_settings()
@@ -37,6 +39,9 @@ app.add_middleware(
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    added = add_missing_columns(engine)
+    if added:
+        logging.getLogger("tezz").info("migrated columns: %s", ", ".join(added))
     if settings.seed_on_startup:
         db = SessionLocal()
         try:
@@ -45,11 +50,20 @@ def on_startup():
             db.close()
 
 
+@app.on_event("startup")
+def start_retry_worker():
+    if settings.retry_worker_enabled and not settings.database_url.startswith("sqlite:///:memory:"):
+        from .services import retry_worker
+
+        retry_worker.start()
+
+
 @app.get("/health", tags=["meta"])
 def health():
     return {"status": "ok"}
 
 
+app.include_router(product_images.router)
 app.include_router(auth.router)
 app.include_router(users.router)
 app.include_router(api_keys.router)
@@ -69,6 +83,7 @@ app.include_router(
         prefix="/api/v1/companies",
         tags=["companies"],
         company_scoped=False,
+        scope=scopes.company_scope,
     )
 )
 app.include_router(
@@ -90,6 +105,7 @@ app.include_router(
         prefix="/api/v1/terminals",
         tags=["terminals"],
         company_scoped=False,
+        scope=scopes.terminal_scope,
     )
 )
 app.include_router(
@@ -151,6 +167,7 @@ app.include_router(
         prefix="/api/v1/modifiers",
         tags=["modifiers"],
         company_scoped=False,
+        scope=scopes.modifier_scope,
     )
 )
 app.include_router(
@@ -182,6 +199,7 @@ app.include_router(
         prefix="/api/v1/floors",
         tags=["floors"],
         company_scoped=False,
+        scope=scopes.floor_scope,
     )
 )
 app.include_router(
@@ -193,6 +211,7 @@ app.include_router(
         prefix="/api/v1/tables",
         tags=["tables"],
         company_scoped=False,
+        scope=scopes.table_scope,
     )
 )
 app.include_router(
@@ -214,6 +233,7 @@ app.include_router(
         prefix="/api/v1/payments",
         tags=["payments"],
         company_scoped=False,
+        scope=scopes.payment_scope,
     )
 )
 app.include_router(

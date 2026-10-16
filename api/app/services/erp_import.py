@@ -93,16 +93,38 @@ def run_import(db: Session, adapter) -> dict:
     stats["modifiers"] = len(mod_to_group)
     station = db.query(models.KitchenStation).filter(models.KitchenStation.company_id == cid).first()
     prods = adapter.pull_products()
+    attr_lines = [lid for p in prods for lid in (p.get("attribute_line_ids") or [])]
+    attrs = adapter.pull_attribute_lines(attr_lines) if attr_lines and hasattr(adapter, "pull_attribute_lines") else {}
+    images = {}
+    if get_settings().odoo_import_images and hasattr(adapter, "pull_images") and prods:
+        images = adapter.pull_images([p["id"] for p in prods])
     for p in prods:
         cat = cat_map.get(p["pos_category_id"][0]) if p.get("pos_category_id") else None
         groups = sorted({mod_to_group[m] for m in (p.get("pos_modifier_ids") or []) if m in mod_to_group})
         price = p.get("pos_price") or p.get("list_price") or 0
-        _upsert(db, models.Product, cid, str(p["id"]), name=(p.get("english_name") or p["name"])[:150],
+        obj = _upsert(db, models.Product, cid, str(p["id"]), name=(p.get("english_name") or p["name"])[:150],
                 name_ur=(p["name"] if p.get("english_name") else "")[:150], sku=(p.get("default_code") or "")[:50],
                 price=price, category_id=cat.id if cat else None,
                 tax_id=None if p.get("is_vat_exempt") else (default_tax.id if default_tax else None),
-                kitchen_station_id=station.id if station else None, modifier_group_ids=",".join(groups), active=True)
+                kitchen_station_id=station.id if station else None, modifier_group_ids=",".join(groups), active=True,
+                attributes=attrs.get(p["id"], "")[:1000])
+        if p["id"] in images:
+            # Odoo image wins unless a manager uploaded one in Tezz admin
+            if obj.image_source != "upload":
+                obj.image_data = images[p["id"]]
+                obj.image_source = "odoo"
+    # Products no longer available in POS (or now excluded, e.g. 'Gift Card Product') are deactivated, not deleted.
+    db.flush()
+    keep = {str(p["id"]) for p in prods}
+    removed = 0
+    for obj in db.query(models.Product).filter(models.Product.company_id == cid, models.Product.erp_ref != "").all():
+        if obj.erp_ref not in keep and obj.active:
+            obj.active = False
+            removed += 1
     stats["products"] = len(prods)
+    stats["products_with_images"] = len(images)
+    stats["products_with_attributes"] = len(attrs)
+    stats["products_deactivated"] = removed
     custs = adapter.pull_customers()
     for c in custs:
         _upsert(db, models.Customer, cid, str(c["id"]), name=(c.get("name") or "")[:150], phone=(c.get("mobile") or "")[:30],

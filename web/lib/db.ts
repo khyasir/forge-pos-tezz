@@ -31,6 +31,10 @@ export interface LocalOrder {
   // exists server-side, whether that happens immediately (online) or after
   // a later offline sync.
   pending_payment?: { payments: PaymentIn[]; customer_phone?: string };
+  // Automatic retry with backoff for rows that failed to reach the server.
+  next_attempt_at?: string;
+  // Server refused the order permanently (e.g. belongs to another company); never auto-retried.
+  rejected?: boolean;
 }
 
 interface TezzDBSchema extends DBSchema {

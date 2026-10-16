@@ -52,7 +52,10 @@ def create_order(
     db: Session = Depends(get_db),
     auth: AuthContext = Depends(get_auth_context),
 ):
-    order, _created = order_service.get_or_create_order(db, auth.company_id, payload)
+    try:
+        order, _created = order_service.get_or_create_order(db, auth.company_id, payload)
+    except order_service.OrderRejected as exc:
+        raise HTTPException(400, str(exc))
     return order
 
 

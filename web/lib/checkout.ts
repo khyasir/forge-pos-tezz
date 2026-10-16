@@ -1,5 +1,5 @@
 // Orchestrates the "always IndexedDB first" checkout flow used by /pos.
-import { putLocalOrder, type LocalOrder } from "./db";
+import { getLocalOrder, putLocalOrder, type LocalOrder } from "./db";
 import { createAndPayNow, isOnline } from "./sync";
 import type { OrderCreate, OrderRead, PaymentIn } from "./types";
 
@@ -14,6 +14,11 @@ export async function checkoutOrder(
   payments: PaymentIn[],
   customerPhone: string | undefined
 ): Promise<CheckoutResult> {
+  // Same ticket submitted twice (double-click, retry after a lost response):
+  // never create a second local/server order.
+  const already = await getLocalOrder(order.client_uuid);
+  if (already) return { clientUuid: order.client_uuid, synced: already.status === "SYNCED" };
+
   const now = new Date().toISOString();
   const online = isOnline();
   const fullOrder: OrderCreate = { ...order, offline: !online };

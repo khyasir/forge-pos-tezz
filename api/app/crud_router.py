@@ -24,6 +24,7 @@ def make_crud_router(
     tags: list[str],
     company_scoped: bool = True,
     parent_field: str | None = None,
+    scope=None,
 ) -> APIRouter:
     """Build list/get/post/patch/delete endpoints for a SQLAlchemy model.
 
@@ -38,6 +39,8 @@ def make_crud_router(
     def _scope_query(q, auth: AuthContext):
         if company_scoped and has_company_col:
             q = q.filter(model.company_id == auth.company_id)
+        if scope is not None:
+            q = scope(q, auth)
         return q
 
     @router.get("", response_model=list[read_schema])
@@ -76,6 +79,9 @@ def make_crud_router(
         if has_company_col and company_scoped:
             data["company_id"] = auth.company_id
         item = model(**data)
+        if scope is not None and getattr(scope, "check_create", None):
+            if not scope.check_create(db, data, auth):
+                raise HTTPException(404, "Parent record not found")
         db.add(item)
         db.commit()
         db.refresh(item)

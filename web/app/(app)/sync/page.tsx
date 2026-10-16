@@ -123,7 +123,7 @@ export default function SyncStatusPage() {
           </thead>
           <tbody>
             {localOnly.map((o) => (
-              <tr key={o.client_uuid} className="border-t border-slate-100">
+              <tr key={o.client_uuid} data-testid="local-row" data-status={o.status} className="border-t border-slate-100">
                 <td className="px-4 py-3 font-medium text-slate-700">(local) {o.client_uuid.slice(0, 8)}</td>
                 <td className="px-4 py-3 text-slate-500">{shortDateTime(o.created_at)}</td>
                 <td className="px-4 py-3 text-right">
@@ -140,7 +140,14 @@ export default function SyncStatusPage() {
                 <td className="px-4 py-3">
                   <span className="chip-neutral">not synced</span>
                 </td>
-                <td className="px-4 py-3 max-w-[200px] truncate text-xs text-rose-600">{o.last_error || ""}</td>
+                <td className="px-4 py-3 max-w-[220px] text-xs text-rose-600">
+                  <span className="block truncate">{o.last_error || ""}</span>
+                  {o.rejected ? (
+                    <span className="block text-slate-500">Will not retry automatically</span>
+                  ) : o.status === "FAILED" && o.next_attempt_at ? (
+                    <span className="block text-slate-500">Auto-retry at {new Date(o.next_attempt_at).toLocaleTimeString()}</span>
+                  ) : null}
+                </td>
                 <td className="px-4 py-3">
                   <button onClick={() => doRetry(o.client_uuid)} disabled={busyRows[o.client_uuid]} className="btn-secondary !px-3 !py-1.5 text-xs">
                     {t("retry")}

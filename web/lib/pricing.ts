@@ -23,12 +23,15 @@ export function estimateTotal(
   lines: OrderLineIn[],
   discount: number,
   tax: TaxRead | undefined,
-  isCash: boolean
-): { subtotal: number; taxAmount: number; posFee: number; total: number } {
+  isCash: boolean,
+  deliveryFee = 0
+): { subtotal: number; taxAmount: number; posFee: number; deliveryFee: number; total: number } {
   const sub = subtotal(lines);
   const rate = taxRateForPayment(tax, isCash);
-  const taxAmount = Math.round(sub * rate * 100) / 100;
+  const fee = lines.length === 0 ? 0 : Math.max(0, deliveryFee || 0);
+  // PRA/FBR: delivery charges are part of the taxable value (mirrors services/orders.py taxable_value)
+  const taxAmount = Math.round((sub + fee) * rate * 100) / 100;
   const posFee = lines.length === 0 ? 0 : POS_FEE_PKR;
-  const total = Math.round((sub - discount + taxAmount + posFee) * 100) / 100;
-  return { subtotal: sub, taxAmount, posFee, total };
+  const total = Math.round((sub - discount + fee + taxAmount + posFee) * 100) / 100;
+  return { subtotal: sub, taxAmount, posFee, deliveryFee: fee, total };
 }

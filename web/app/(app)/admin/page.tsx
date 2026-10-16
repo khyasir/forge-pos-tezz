@@ -6,6 +6,7 @@ import CategoriesTab from "./tabs/CategoriesTab";
 import ModifiersTab from "./tabs/ModifiersTab";
 import TablesTab from "./tabs/TablesTab";
 import ApiKeysTab from "./tabs/ApiKeysTab";
+import SettingsTab from "./tabs/SettingsTab";
 
 const TABS = [
   { key: "products", label: "Products" },
@@ -13,6 +14,7 @@ const TABS = [
   { key: "modifiers", label: "Modifiers" },
   { key: "tables", label: "Tables" },
   { key: "apikeys", label: "API Keys" },
+  { key: "settings", label: "Settings" },
 ] as const;
 
 type TabKey = (typeof TABS)[number]["key"];
@@ -50,6 +52,7 @@ export default function AdminPage() {
       {tab === "modifiers" && <ModifiersTab />}
       {tab === "tables" && <TablesTab />}
       {tab === "apikeys" && <ApiKeysTab />}
+      {tab === "settings" && <SettingsTab />}
     </div>
   );
 }

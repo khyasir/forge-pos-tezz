@@ -22,6 +22,54 @@ import type { OrderCreate, OrderRead, PaymentIn, SyncBatchResponse } from "./typ
 const SIMULATE_OFFLINE_KEY = "tezz_simulate_offline";
 const DEMO_SEEDED_KEY = "demo_unsynced_preloaded";
 const BATCH_SIZE = 50;
+const STALE_SYNCING_MS = 2 * 60 * 1000; // tab crashed/closed mid-sync -> retry
+const MAX_BACKOFF_MS = 5 * 60 * 1000;
+
+function staleSyncingMs(): number {
+  // test hook: e2e tests shorten this to simulate "crash mid-sync" recovery quickly
+  const v = typeof window !== "undefined" ? Number(window.localStorage.getItem("tezz_stale_syncing_ms")) : 0;
+  return v > 0 ? v : STALE_SYNCING_MS;
+}
+
+/** 5s, 10s, 20s, 40s ... capped at 5 minutes. */
+export function backoffMs(attempts: number): number {
+  return Math.min(5000 * 2 ** Math.max(0, attempts - 1), MAX_BACKOFF_MS);
+}
+
+function failed(o: LocalOrder, message: string): LocalOrder {
+  const attempts = o.attempts + 1;
+  return {
+    ...o,
+    status: "FAILED",
+    attempts,
+    last_error: message,
+    next_attempt_at: new Date(Date.now() + backoffMs(attempts)).toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+}
+
+/** Only one tab/window syncs at a time (Web Locks API); others skip the tick. */
+async function withSyncLock<T>(fn: () => Promise<T>, fallback: T): Promise<T> {
+  const locks = typeof navigator !== "undefined" ? (navigator as Navigator & { locks?: LockManager }).locks : undefined;
+  if (!locks) return fn();
+  let ran = false;
+  const result = await locks.request("tezz-sync", { ifAvailable: true }, async (lock) => {
+    if (!lock) return fallback;
+    ran = true;
+    return fn();
+  });
+  return ran ? (result as T) : fallback;
+}
+
+export function isDue(o: LocalOrder, now = Date.now()): boolean {
+  if (o.rejected) return false;
+  if (o.status === "LOCAL") return true;
+  if (o.status === "FAILED") return !o.next_attempt_at || Date.parse(o.next_attempt_at) <= now;
+  if (o.status === "SYNCING") return now - Date.parse(o.updated_at) > staleSyncingMs();
+  // Reached the server but payment was not finalized yet (e.g. network dropped between create and pay)
+  if (o.status === "SYNCED" && o.pending_payment && o.order_status === "open") return true;
+  return false;
+}
 
 export function isSimulatedOffline(): boolean {
   if (typeof window === "undefined") return false;
@@ -75,8 +123,11 @@ async function finalizePaymentIfNeeded(local: LocalOrder, serverOrder: OrderRead
       payments: local.pending_payment.payments,
       customer_phone: local.pending_payment.customer_phone,
     });
-  } catch {
-    return serverOrder; // leave as open; a manual Retry from /sync can re-attempt
+  } catch (err) {
+    // 400 = someone (another tab, an earlier attempt whose response was lost)
+    // already paid it. The server is the source of truth: re-read it.
+    if (err instanceof ApiError && err.status === 400) return api.get<OrderRead>(`/v1/orders/${serverOrder.id}`);
+    throw err; // network error: caller marks FAILED and the loop retries with backoff
   }
 }
 
@@ -105,66 +156,92 @@ export interface SyncRunResult {
 /** Pushes the oldest unsynced (or retryable failed) local orders. Call this
  * from the 10s interval, and also immediately after creating an order while
  * online, and from manual "Retry"/"Retry all" actions on /sync. */
-export async function runSyncOnce(terminalId: string | undefined): Promise<SyncRunResult> {
+export async function runSyncOnce(terminalId: string | undefined, opts: { force?: boolean } = {}): Promise<SyncRunResult> {
   if (!isOnline()) return { attempted: 0, synced: 0, failed: 0, skippedOffline: true };
+  return withSyncLock(() => syncPass(terminalId, !!opts.force), { attempted: 0, synced: 0, failed: 0, skippedOffline: false });
+}
 
+async function syncPass(terminalId: string | undefined, force: boolean): Promise<SyncRunResult> {
   const all = await listLocalOrders();
-  const candidates = all.filter((o) => o.status === "LOCAL" || o.status === "FAILED");
+  const now = Date.now();
+  const candidates = all.filter((o) => (force ? !o.rejected && o.status !== "SYNCED" : isDue(o, now)) || isDue(o, now));
   const batch = candidates
     .sort((a, b) => (a.created_at < b.created_at ? -1 : 1))
     .slice(0, BATCH_SIZE);
-  if (batch.length === 0) return { attempted: 0, synced: 0, failed: 0, skippedOffline: false };
+  if (batch.length === 0) {
+    await refreshDownstream();
+    return { attempted: 0, synced: 0, failed: 0, skippedOffline: false };
+  }
 
   for (const o of batch) {
-    o.status = "SYNCING";
+    o.status = o.status === "SYNCED" ? "SYNCED" : "SYNCING";
+    o.updated_at = new Date().toISOString();
     await putLocalOrder(o);
   }
 
+  let resp: SyncBatchResponse;
   try {
-    const resp = await api.post<SyncBatchResponse>("/v1/sync/batch", {
+    resp = await api.post<SyncBatchResponse>("/v1/sync/batch", {
       terminal_id: terminalId || batch[0].order.terminal_id || "",
       orders: batch.map((b) => b.order),
     });
-    const byUuid = new Map(resp.results.map((r) => [r.client_uuid, r]));
-    let synced = 0;
-    let failed = 0;
-    for (const o of batch) {
-      const result = byUuid.get(o.client_uuid);
-      const now = new Date().toISOString();
-      if (result) {
-        try {
-          let full = await api.get<OrderRead>(`/v1/orders/${result.server_id}`);
-          full = await finalizePaymentIfNeeded(o, full);
-          await putLocalOrder({ ...fromServerOrder(o, full), status: "SYNCED", updated_at: now });
-        } catch {
-          await putLocalOrder({ ...o, status: "SYNCED", server_id: result.server_id, updated_at: now });
-        }
-        synced++;
-      } else {
-        await putLocalOrder({
-          ...o,
-          status: "FAILED",
-          attempts: o.attempts + 1,
-          last_error: "Server did not acknowledge this order",
-          updated_at: now,
-        });
-        failed++;
-      }
-    }
-    return { attempted: batch.length, synced, failed, skippedOffline: false };
   } catch (err) {
     const message = err instanceof ApiError ? err.message : "Network error while syncing";
-    const now = new Date().toISOString();
-    for (const o of batch) {
-      await putLocalOrder({
-        ...o,
-        status: "FAILED",
-        attempts: o.attempts + 1,
-        last_error: message,
-        updated_at: now,
-      });
-    }
+    for (const o of batch) await putLocalOrder(failed(o, message));
     return { attempted: batch.length, synced: 0, failed: batch.length, skippedOffline: false };
+  }
+
+  const byUuid = new Map(resp.results.map((r) => [r.client_uuid, r]));
+  let synced = 0;
+  let failedCount = 0;
+  for (const o of batch) {
+    const result = byUuid.get(o.client_uuid);
+    const ts = new Date().toISOString();
+    if (!result) {
+      await putLocalOrder(failed(o, "Server did not acknowledge this order"));
+      failedCount++;
+      continue;
+    }
+    if (result.status === "error") {
+      await putLocalOrder(failed(o, result.error || "Server error"));
+      failedCount++;
+      continue;
+    }
+    if (result.status === "rejected") {
+      await putLocalOrder({ ...o, status: "FAILED", rejected: true, last_error: `Rejected by server: ${result.error}`, updated_at: ts });
+      failedCount++;
+      continue;
+    }
+    try {
+      let full = await api.get<OrderRead>(`/v1/orders/${result.server_id}`);
+      full = await finalizePaymentIfNeeded(o, full);
+      await putLocalOrder({ ...fromServerOrder(o, full), status: "SYNCED", last_error: undefined, next_attempt_at: undefined, updated_at: ts });
+      synced++;
+    } catch (err) {
+      // Order exists on the server but payment is not finalized yet. Keep it
+      // due for retry; /sync/batch is idempotent so resending is safe.
+      const message = err instanceof ApiError ? err.message : "Network error while finalizing payment";
+      await putLocalOrder(failed({ ...o, server_id: result.server_id }, message));
+      failedCount++;
+    }
+  }
+  return { attempted: batch.length, synced, failed: failedCount, skippedOffline: false };
+}
+
+/** The server now retries FBR/Odoo automatically. This refreshes local rows
+ * whose fiscal/ERP step was not yet ok so the Sync page shows the latest. */
+async function refreshDownstream(): Promise<void> {
+  const all = await listLocalOrders();
+  const stale = all
+    .filter((o) => o.status === "SYNCED" && o.server_id && (o.fiscal_status !== "ok" || o.erp_status !== "ok"))
+    .slice(0, 10);
+  for (const o of stale) {
+    try {
+      const full = await api.get<OrderRead>(`/v1/orders/${o.server_id}`);
+      await putLocalOrder({ ...fromServerOrder(o, full), updated_at: new Date().toISOString() });
+    } catch {
+      return;
+    }
   }
 }
 
@@ -201,12 +278,14 @@ export async function retryOrder(clientUuid: string, terminalId: string | undefi
     return;
   }
   order.status = "LOCAL"; // re-queue for the next sync pass
+  order.next_attempt_at = undefined;
+  order.rejected = false;
   await putLocalOrder(order);
   await runSyncOnce(terminalId);
 }
 
 export async function retryAll(terminalId: string | undefined, serverFailedOrderIds: string[] = []): Promise<void> {
-  await runSyncOnce(terminalId);
+  await runSyncOnce(terminalId, { force: true });
   const all = await listLocalOrders();
   const needsDownstreamRetry = all.filter(
     (o) => o.status === "SYNCED" && o.server_id && (o.fiscal_status === "failed" || o.erp_status === "failed")
@@ -233,9 +312,15 @@ export async function createAndPayNow(
   payments: PaymentIn[],
   customerPhone: string | undefined
 ): Promise<OrderRead> {
-  const created = await api.post<OrderRead>("/v1/orders", order);
-  return api.post<OrderRead>(`/v1/orders/${created.id}/pay`, {
-    payments,
-    customer_phone: customerPhone,
-  });
+  const created = await api.post<OrderRead>("/v1/orders", order); // idempotent on client_uuid
+  if (created.status !== "open") return created;
+  try {
+    return await api.post<OrderRead>(`/v1/orders/${created.id}/pay`, {
+      payments,
+      customer_phone: customerPhone,
+    });
+  } catch (err) {
+    if (err instanceof ApiError && err.status === 400) return api.get<OrderRead>(`/v1/orders/${created.id}`);
+    throw err;
+  }
 }

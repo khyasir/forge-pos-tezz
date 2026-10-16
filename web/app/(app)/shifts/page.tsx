@@ -23,7 +23,8 @@ export default function ShiftsPage() {
     const list = await api.get<ShiftRead[]>(`/v1/shifts?branch_id=${session.branchId}`);
     setShifts(list);
     setLoaded(true);
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token]);
 
   useEffect(() => {
     refresh();

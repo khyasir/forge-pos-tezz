@@ -35,6 +35,7 @@
     Date/Time: {{ order.paid_at or order.created_at }}<br/>
     Payment Mode: {{ order.payment_mode or "-" }}<br/>
     Order Type: {{ order.order_type }}<br/>
+    {% if order.delivery_address %}Deliver to: {{ order.delivery_address }}<br/>{% endif %}
     {% if customer and customer.phone %}Customer: {{ customer.name }} ({{ customer.phone }})<br/>{% endif %}
   </p>
   <hr/>
@@ -56,6 +57,7 @@
   <hr/>
   <table class="totals">
     <tr><td>Price excl. tax</td><td class="right">Rs. {{ "%.2f"|format(order.subtotal) }}</td></tr>
+    {% if order.delivery_fee %}<tr><td>Delivery Charges</td><td class="right">Rs. {{ "%.2f"|format(order.delivery_fee) }}</td></tr>{% endif %}
     <tr><td>Discount</td><td class="right">Rs. {{ "%.2f"|format(order.discount) }}</td></tr>
     <tr><td>Sales Tax</td><td class="right">Rs. {{ "%.2f"|format(order.tax_amount) }}</td></tr>
     <tr><td>{{ pos_fee_label }}</td><td class="right">Rs. {{ "%.2f"|format(order.pos_fee) }}</td></tr>

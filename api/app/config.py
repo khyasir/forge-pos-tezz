@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     odoo_import_limit: int = 500
     odoo_customer_limit: int = 200
     odoo_order_note_prefix: str = "TEZZ-TEST"
+    odoo_delivery_product_id: int = 0  # optional Odoo product used for the delivery-charge line
+    odoo_import_images: bool = True
+
+    retry_worker_enabled: bool = True
+    retry_worker_interval_s: int = 15
 
     pos_fee_pkr: float = 1.0
 

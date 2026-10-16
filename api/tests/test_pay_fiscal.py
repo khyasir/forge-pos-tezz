@@ -108,7 +108,9 @@ def test_offline_order_marked_pending_fiscal(client, seeded):
         json={"payments": [{"payment_method_id": seeded["cash_pm"], "amount": 500, "tendered": 500}]},
         headers=headers,
     )
-    assert r.json()["fiscal_status"] == "offline_mode"
+    # v2: an order rung up offline is fiscalized as soon as it reaches the server.
+    assert r.json()["fiscal_status"] == "ok"
+    assert r.json()["offline"] is True
 
 
 def test_fiscal_retry_after_coming_online(client, seeded):

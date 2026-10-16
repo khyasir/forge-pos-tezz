@@ -55,7 +55,7 @@ def build_receipt_data(db: Session, order: models.Order) -> dict:
         "payments": payments,
         "method_names": {m.id: m.name for m in db.query(models.PaymentMethod).all()},
         "qr_svg": qr,
-        "is_offline": order.fiscal_status == "offline_mode",
+        "is_offline": order.fiscal_status == "offline_mode" or bool(order.offline),
         "is_fiscal_failed": order.fiscal_status == "failed",
         "pos_fee_label": "Rs.1 POS Service Fee",
     }

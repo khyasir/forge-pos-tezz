@@ -89,3 +89,11 @@ with `?updated_since=` as a fallback.
 ## Sandbox
 The seeded demo company ("Lahore Karahi House") and its sandbox API key work as a test
 tenant out of the box — see `/admin` -> API Keys in the running app, or `SUMMARY.md`.
+
+## v2 additions
+- `PUT /api/v1/products/{id}/image` with `{"data_url": "data:image/png;base64,..."}` (max 1.5 MB, owner/manager).
+  `GET /api/v1/products/{id}/image` serves it (public, cacheable). `DELETE` removes it. `ProductRead.image_url` points to it.
+- Orders: `delivery_fee` (null = company `default_delivery_fee` when `order_type` is `delivery`) and `delivery_address`.
+  Sales tax is charged on subtotal plus delivery fee. The fee is a separate "Delivery Charges" item in the FBR payload.
+- `POST /api/v1/sync/batch` results may have `status: "rejected"` (never retried) or `"error"` (retry later) with an `error` text.
+- FBR and Odoo pushes are retried automatically by the API with exponential backoff.

@@ -1,5 +1,5 @@
 "use client";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import Modal from "@/components/Modal";
 import { useLang } from "@/lib/lang";
 import { pkr, uuid } from "@/lib/format";
@@ -24,6 +24,7 @@ const METHOD_LABEL_KEY: Record<string, string> = {
 export default function PayDialog({
   lines,
   discount,
+  deliveryFee = 0,
   tax,
   paymentMethods,
   customerPhone,
@@ -33,6 +34,7 @@ export default function PayDialog({
 }: {
   lines: OrderLineIn[];
   discount: number;
+  deliveryFee?: number;
   tax: TaxRead | undefined;
   paymentMethods: PaymentMethodRead[];
   customerPhone: string;
@@ -44,13 +46,14 @@ export default function PayDialog({
   const [tenders, setTenders] = useState<TenderRow[]>([]);
   const [splitMode, setSplitMode] = useState(false);
   const [submitting, setSubmitting] = useState(false);
+  const inFlight = useRef(false); // hard guard against double-click before re-render
   const [error, setError] = useState<string | null>(null);
 
   const isCash =
     tenders.length > 0 && tenders.every((row) => paymentMethods.find((m) => m.id === row.payment_method_id)?.code === "cash");
   const estimate = useMemo(
-    () => estimateTotal(lines, discount, tax, tenders.length === 0 ? true : isCash),
-    [lines, discount, tax, isCash, tenders.length]
+    () => estimateTotal(lines, discount, tax, tenders.length === 0 ? true : isCash, deliveryFee),
+    [lines, discount, tax, isCash, tenders.length, deliveryFee]
   );
   const tenderedSum = Math.round(tenders.reduce((s, r) => s + r.amount, 0) * 100) / 100;
   const remaining = Math.round((estimate.total - tenderedSum) * 100) / 100;
@@ -60,7 +63,7 @@ export default function PayDialog({
   function selectSingleMethod(methodId: string) {
     const method = paymentMethods.find((m) => m.id === methodId);
     const willBeCash = method?.code === "cash";
-    const est = estimateTotal(lines, discount, tax, willBeCash);
+    const est = estimateTotal(lines, discount, tax, willBeCash, deliveryFee);
     setTenders([{ uid: uuid(), payment_method_id: methodId, amount: est.total, tendered: est.total }]);
     setSplitMode(false);
     setError(null);
@@ -96,7 +99,8 @@ export default function PayDialog({
   const canConfirm = tenders.length > 0 && Math.abs(remaining) < 0.01 && !submitting;
 
   async function confirm() {
-    if (!canConfirm) return;
+    if (!canConfirm || inFlight.current) return;
+    inFlight.current = true;
     setSubmitting(true);
     setError(null);
     try {
@@ -111,6 +115,7 @@ export default function PayDialog({
       setError(err instanceof Error ? err.message : "Payment failed");
     } finally {
       setSubmitting(false);
+      inFlight.current = false;
     }
   }
 
@@ -121,6 +126,7 @@ export default function PayDialog({
           <Row label={t("subtotal")} value={pkr(estimate.subtotal)} />
           {discount > 0 && <Row label={t("discount")} value={`- ${pkr(discount)}`} />}
           <Row label={`${t("tax")} (${Math.round((tenders.length === 0 ? (tax?.cash_rate ?? 0) : isCash ? tax?.cash_rate ?? 0 : tax?.card_rate ?? 0) * 100)}%)`} value={pkr(estimate.taxAmount)} />
+          {estimate.deliveryFee > 0 && <Row label={t("delivery_fee")} value={pkr(estimate.deliveryFee)} />}
           <Row label={t("pos_fee")} value={pkr(estimate.posFee)} />
           <div className="mt-2 flex items-center justify-between border-t border-slate-200 pt-2 text-base font-bold text-slate-900">
             <span>{t("total")}</span>

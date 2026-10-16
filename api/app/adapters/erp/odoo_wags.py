@@ -70,9 +70,39 @@ class OdooWagsAdapter(ERPAdapter):
     def pull_products(self, limit=None):
         limit = limit or get_settings().odoo_import_limit
         return self._x("product.product.wags", "search_read",
-                       [("active", "=", True), ("available_in_pos", "=", True), ("is_modifier", "=", False), ("is_gift_voucher", "=", False)],
+                       [("active", "=", True), ("available_in_pos", "=", True), ("is_modifier", "=", False),
+                        ("is_gift_voucher", "=", False), ("name", "not ilike", "gift card")],
                        fields=["name", "english_name", "default_code", "barcode", "list_price", "pos_price",
-                               "pos_category_id", "pos_modifier_ids", "is_vat_exempt"], limit=limit, order="id")
+                               "pos_category_id", "pos_modifier_ids", "is_vat_exempt", "attribute_line_ids",
+                               "is_combo"], limit=limit, order="id")
+
+    def pull_attribute_lines(self, line_ids):
+        """Variant attributes per product (WAGS stores one product per variant,
+        e.g. 'Zone: R'). Returned as {product_id: "Attr: Value; ..."}."""
+        out = {}
+        ids = list(line_ids)
+        for i in range(0, len(ids), 200):
+            rows = self._x("product.attribute.line.wags", "read", ids[i:i + 200],
+                           fields=["product_id", "attribute_id", "value_id"])
+            for r in rows:
+                if not (r.get("product_id") and r.get("attribute_id") and r.get("value_id")):
+                    continue
+                out.setdefault(r["product_id"][0], []).append(f"{r['attribute_id'][1]}: {r['value_id'][1]}")
+        return {k: "; ".join(v) for k, v in out.items()}
+
+    def pull_images(self, product_ids, batch=20):
+        """{product_id: data_url} for products that have an image."""
+        out = {}
+        ids = self._x("product.product.wags", "search", [("id", "in", list(product_ids)), ("image", "!=", False)])
+        for i in range(0, len(ids), batch):
+            for r in self._x("product.product.wags", "read", ids[i:i + batch], fields=["image"]):
+                b64 = r.get("image")
+                if not b64:
+                    continue
+                mime = "image/png" if b64.startswith("iVBOR") else "image/webp" if b64.startswith("UklGR") else \
+                    "image/svg+xml" if b64.startswith("PHN2") or b64.startswith("PD94") else "image/jpeg"
+                out[r["id"]] = f"data:{mime};base64,{b64}"
+        return out
 
     def pull_modifiers(self):
         cats = self._x("pos.product.modifier.category.wags", "search_read", [], fields=["name"])
@@ -115,6 +145,16 @@ class OdooWagsAdapter(ERPAdapter):
             if not lines:
                 return ERPPushResult(ok=False, error="No lines mapped to Odoo products (import products first)")
             note = f"{self.note_prefix} order from Tezz POS. USIN {usin}. Order {order.get('order_no','')}."
+            if order.get("order_type"):
+                note += f" Type: {order['order_type']}."
+            if order.get("delivery_fee"):
+                dp = get_settings().odoo_delivery_product_id
+                if dp:
+                    lines.append((0, 0, {"product_id": int(dp), "quantity": 1, "price_unit": order["delivery_fee"],
+                                         "name": "Delivery Charges"}))
+                note += f" Delivery charges: {order['delivery_fee']:.2f}."
+                if order.get("delivery_address"):
+                    note += f" Address: {order['delivery_address'][:200]}."
             if skipped:
                 note += " Skipped unmapped lines: " + ", ".join(skipped)
             vals = {"client_order_ref": usin, "notes": note, "sale_type": "product",

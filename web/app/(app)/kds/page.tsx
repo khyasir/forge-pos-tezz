@@ -18,7 +18,7 @@ export default function KdsPage() {
     try {
       const [st, pr, ord] = await Promise.all([
         api.get<KitchenStationRead[]>("/v1/kitchen-stations?limit=50"),
-        api.get<ProductRead[]>("/v1/products?limit=200"),
+        api.getAll<ProductRead>("/v1/products"),
         api.get<OrderRead[]>(`/v1/orders?limit=100&branch_id=${session?.branchId || ""}`),
       ]);
       setStations(st);

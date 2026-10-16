@@ -9,6 +9,7 @@ export interface CompanyRead {
   ntn: string;
   strn: string;
   tax_authority: string;
+  default_delivery_fee: number;
   created_at: string;
   updated_at: string;
 }
@@ -96,6 +97,8 @@ export interface ProductRead {
   pct_code: string;
   active: boolean;
   modifier_group_ids: string;
+  attributes?: string;
+  image_url?: string;
   created_at: string;
   updated_at: string;
 }
@@ -233,6 +236,8 @@ export interface OrderCreate {
   notes: string;
   offline: boolean;
   created_at?: string | null;
+  delivery_fee?: number | null;
+  delivery_address?: string;
   lines: OrderLineIn[];
 }
 
@@ -255,6 +260,8 @@ export interface OrderRead {
   discount: number;
   tax_amount: number;
   pos_fee: number;
+  delivery_fee?: number;
+  delivery_address?: string;
   total: number;
   payment_mode: string;
   notes: string;
@@ -305,6 +312,7 @@ export interface SyncOrderResult {
   status: string;
   fiscal_status: string;
   erp_status: string;
+  error?: string;
 }
 
 export interface SyncBatchResponse {

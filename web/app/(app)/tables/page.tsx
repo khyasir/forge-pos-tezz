@@ -24,7 +24,8 @@ export default function TablesPage() {
         if (mine[0]) setActiveFloor(mine[0].id);
       })
       .finally(() => setLoaded(true));
-  }, [session]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session?.token]);
 
   const current = useMemo(() => floors.find((f) => f.id === activeFloor), [floors, activeFloor]);
 
