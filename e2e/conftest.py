@@ -26,9 +26,17 @@ def api(method, path, body=None):
 
 def sql(q):
     """Read-only checks against the local Tezz Postgres (never Odoo)."""
+    # Defaults match the box's host-network stack; override for a plain
+    # `docker compose up` (bridge network): TEZZ_COMPOSE_FILES=docker-compose.yml
+    # TEZZ_DB_PORT=5432 and, if needed, TEZZ_COMPOSE_PROJECT=<name>.
+    files = os.environ.get("TEZZ_COMPOSE_FILES", "docker-compose.yml,docker-compose.hostnet.yml").split(",")
+    cmd = ["docker", "compose"]
+    if os.environ.get("TEZZ_COMPOSE_PROJECT"):
+        cmd += ["-p", os.environ["TEZZ_COMPOSE_PROJECT"]]
+    for f in files:
+        cmd += ["-f", f]
     out = subprocess.run(
-        ["docker", "compose", "-f", "docker-compose.yml", "-f", "docker-compose.hostnet.yml", "exec", "-T", "db",
-         "psql", "-p", "5442", "-U", "tezz", "-At", "-c", q],
+        cmd + ["exec", "-T", "db", "psql", "-p", os.environ.get("TEZZ_DB_PORT", "5442"), "-U", "tezz", "-At", "-c", q],
         cwd=COMPOSE_DIR, capture_output=True, text=True, check=True,
     )
     return out.stdout.strip()

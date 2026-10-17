@@ -2,7 +2,7 @@
 database reset: a stored login the API no longer accepts must send the
 cashier back to the PIN screen, and logging in again must show the catalog.
 Run against the running stack:  python3 -m pytest e2e/test_e2e_session.py -v"""
-from conftest import login
+from conftest import BASE, login
 
 
 def test_stale_session_redirects_to_login_then_products_show(ctx):
@@ -25,6 +25,6 @@ def test_stale_session_redirects_to_login_then_products_show(ctx):
 
 def test_service_worker_is_network_first_for_pages(ctx):
     page = ctx.new_page()
-    sw = page.request.get(login.__globals__["BASE"] + "/sw.js").text()
+    sw = page.request.get(BASE + "/sw.js").text()
     assert "tezz-pos-shell-v2" in sw
     assert "network first" in sw.lower()

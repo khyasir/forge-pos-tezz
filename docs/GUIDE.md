@@ -217,3 +217,18 @@ The quotation note starts with "TEZZ-TEST" and includes the order type and the d
 - **"pending" stays above 0.** Check the internet. Open Sync Status to see the reason.
 - **A product has no picture.** Upload one in Back Office, Products. Or add it in Odoo and run the import.
 - **I need the API.** Open `/api/docs`. Every endpoint, including product images (`PUT /api/v1/products/{id}/image`) and delivery fields on orders, is listed there.
+
+## 12. Updating to a new version
+
+Run these in the `forge-pos-tezz` folder:
+
+```
+git pull
+docker compose up -d --build
+```
+
+Then open http://localhost:8120 and press **Cmd+Shift+R** (Mac) or **Ctrl+Shift+R** (Windows) once.
+
+You do **not** need `docker compose down -v`. That command deletes all orders and resets the demo data.
+
+**The cashier screen shows no products.** Versions before T6.1 kept an old login after the database was reset or the 12-hour login expired. Every catalog request was then refused, and the screen stayed empty. From T6.1 the app sends you back to the PIN screen with the message "Your session has expired". Enter your PIN again and the products load. Offline orders saved on the device are kept and sync after you log in.
