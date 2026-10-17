@@ -1,9 +1,29 @@
 // Thin fetch wrapper for the Tezz POS API. All paths are relative to
 // NEXT_PUBLIC_API_BASE (default "/api"), which next.config.js rewrites to
 // the FastAPI backend (see API_PROXY_TARGET there).
-import { getToken } from "./auth";
+import { clearSession, getToken } from "./auth";
 
 export const API_BASE = process.env.NEXT_PUBLIC_API_BASE || "/api";
+
+/**
+ * A stored login whose token the API no longer accepts (expired after
+ * JWT_EXPIRES_MINUTES, or the database was reset/re-seeded so the user and
+ * company ids in the token no longer exist). Without this, every catalog
+ * call 401s and the cashier screen silently shows no products. Drop the
+ * dead session and send the cashier back to the PIN screen; locally queued
+ * offline orders stay in IndexedDB and sync after the next login.
+ */
+export function handleExpiredSession(): void {
+  if (typeof window === "undefined") return;
+  clearSession();
+  if (!window.location.pathname.startsWith("/login")) {
+    window.location.replace("/login?reason=expired");
+  }
+}
+
+function checkSessionRejected(status: number, usedSessionToken: boolean): void {
+  if (status === 401 && usedSessionToken) handleExpiredSession();
+}
 
 export class ApiError extends Error {
   status: number;
@@ -29,6 +49,7 @@ async function request<T>(
   const res = await fetch(`${API_BASE}${path}`, { ...opts, headers });
 
   if (!res.ok) {
+    checkSessionRejected(res.status, tokenOverride === undefined && !!token);
     let detail = res.statusText || `HTTP ${res.status}`;
     try {
       const data = await res.json();
@@ -49,6 +70,7 @@ export async function getRawText(path: string, tokenOverride?: string | null): P
   const headers: Record<string, string> = {};
   if (token) headers["Authorization"] = `Bearer ${token}`;
   const res = await fetch(`${API_BASE}${path}`, { headers });
+  checkSessionRejected(res.ok ? 200 : res.status, tokenOverride === undefined && !!token);
   if (!res.ok) throw new ApiError(res.status, res.statusText || `HTTP ${res.status}`);
   return res.text();
 }

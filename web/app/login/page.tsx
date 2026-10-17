@@ -22,6 +22,11 @@ export default function LoginPage() {
   const [loadingPickers, setLoadingPickers] = useState(true);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).get("reason") === "expired") setSessionExpired(true);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +125,12 @@ export default function LoginPage() {
       <div className="w-full max-w-sm rounded-2xl bg-ink-900 p-6 shadow-2xl">
         <h1 className="mb-1 text-center text-base font-semibold text-white">{t("login")}</h1>
         <p className="mb-5 text-center text-xs text-slate-400">Lahore Karahi House</p>
+
+        {sessionExpired && (
+          <div data-testid="session-expired" className="mb-4 rounded-lg bg-sky-500/10 p-3 text-xs leading-relaxed text-sky-300">
+            Your session has expired or the data was reset. Please enter your PIN again.
+          </div>
+        )}
 
         {pickerError && (
           <div className="mb-4 rounded-lg bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-300">
